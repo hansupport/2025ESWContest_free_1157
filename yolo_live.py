@@ -19,15 +19,41 @@ while True:
     if key == 'q':
         break
     elif key != '1':
-        continue  # 1 외에는 무시하고 다시 대기
+        continue
 
     ret, frame = cap.read()
     if not ret:
         print("카메라에서 영상을 읽지 못했습니다.")
         break
 
-    # YOLO 예측
-    results = model.predict(source=frame, show=True, conf=0.4)
+    # YOLO 예측 (show=False로 설정)
+    results = model.predict(source=frame, conf=0.4, show=False)
 
-cap.release()
+    # 시각화된 결과 이미지 얻기
+    result_img = results[0].plot()
+
+    # 결과 이미지 표시
+    cv2.imshow("YOLOv8 Detection", result_img)
+
+    # 터미널 입력이 들어올 때까지 이미지 창 유지
+    while True:
+        # ESC 키 누르면 종료
+        if cv2.waitKey(100) & 0xFF == 27:  # ESC = 27
+            print("ESC 입력으로 종료합니다.")
+            cap.release()
+            cv2.destroyAllWindows()
+            exit()
+
+        # 터미널 입력이 있으면 다음 루프
+        if cv2.getWindowProperty("YOLOv8 Detection", cv2.WND_PROP_VISIBLE) < 1:
+            # 창이 닫힌 경우 종료
+            break
+
+        # 여기서 다시 터미널 입력 받음
+        if input("▶ 다음 프레임: 1 / 종료: q > ").strip() == '1':
+            break
+        else:
+            print("❗ '1'을 입력해야 다음 프레임으로 넘어갑니다.")
+
 cv2.destroyAllWindows()
+cap.release()
