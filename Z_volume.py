@@ -96,8 +96,8 @@ try:
     if not is_vis_initialized:
         print("\n[중요] Open3D 시각화 창 생성에 실패했습니다. 그래픽 드라이버 상태를 확인하세요.\n")
     
-    min_bound = o3d.core.Tensor([ROI_BOUNDS["min_x"], ROI_BOUNDS["min_y"], ROI_BOUNDS["min_z"]], o3d.core.float64, device)
-    max_bound = o3d.core.Tensor([ROI_BOUNDS["max_x"], ROI_BOUNDS["max_y"], ROI_BOUNDS["max_z"]], o3d.core.float64, device)
+    min_bound = o3d.core.Tensor([ROI_BOUNDS["min_x"], ROI_BOUNDS["min_y"], ROI_BOUNDS["min_z"]], dtype=o3d.core.Dtype.Float64, device=device)
+    max_bound = o3d.core.Tensor([ROI_BOUNDS["max_x"], ROI_BOUNDS["max_y"], ROI_BOUNDS["max_z"]], dtype=o3d.core.Dtype.Float64, device=device)
     roi_bbox_t = o3d.t.geometry.AxisAlignedBoundingBox(min_bound=min_bound, max_bound=max_bound)
 
     while True:

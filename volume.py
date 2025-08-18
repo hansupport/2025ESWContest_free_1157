@@ -1,188 +1,244 @@
 import pyrealsense2 as rs
-import open3d as o3d
+import cupoch as cph
 import numpy as np
 import time
+import os
+import sys
+import traceback
 
 # --- [1] 사용자 설정: 관심 영역(ROI) 및 바닥 제거 ---
 ROI_BOUNDS = {
-    "min_x": -0.3,  # ROI의 왼쪽 경계
-    "max_x": 0.3,   # ROI의 오른쪽 경계
-    "min_y": -0.3,  # ROI의 위쪽 경계
-    "max_y": 0.3,   # ROI의 아래쪽 경계
-    "min_z": 0.5,   # ROI의 앞쪽(카메라에 가까운) 경계
-    "max_z": 0.8    # ROI의 뒤쪽(카메라에서 먼) 경계
+    "min_x": -0.3,
+    "max_x":  0.3,
+    "min_y": -0.3,
+    "max_y":  0.3,
+    "min_z":  0.5,
+    "max_z":  0.8
 }
-PLANE_DISTANCE_THRESHOLD = 0.01
-MIN_PLANE_RATIO = 0.2
+PLANE_DISTANCE_THRESHOLD = 0.01   # 평면 분리 임계값 [m]
+MIN_PLANE_RATIO = 0.2             # inliers가 전체 중 이 비율 미만이면 평면 제거 중단
+DBSCAN_EPS = 0.02                 # [m]
+DBSCAN_MIN_POINTS = 10
 
-# --- CUDA 장치 설정 ---
-if o3d.core.cuda.is_available():
-    device = o3d.core.Device("CUDA:0")
-    print("Open3D에서 CUDA를 사용합니다.")
-else:
-    device = o3d.core.Device("CPU:0")
-    print("CUDA를 찾을 수 없어 CPU를 사용합니다.")
+# --- CUDA 사용 여부 출력 ---
+try:
+    cuda_ok = cph.utility.is_cuda_available()
+except Exception:
+    cuda_ok = False
+print("cupoch CUDA 사용 가능:", cuda_ok)
 
-# --- [2] 함수 정의 영역 ---
+# --- [2] RealSense 파이프라인 유틸 ---
 def create_pipeline(serial):
-    pipeline = rs.pipeline()
-    config = rs.config()
-    config.enable_device(serial)
-    config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-    pipeline.start(config)
-    return pipeline
+    pipe = rs.pipeline()
+    cfg  = rs.config()
+    cfg.enable_device(serial)
+    cfg.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    cfg.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+    pipe.start(cfg)
+    return pipe
 
-def get_intrinsics(pipeline):
-    profile = pipeline.get_active_profile()
-    intr = profile.get_stream(rs.stream.depth).as_video_stream_profile().get_intrinsics()
-    return o3d.camera.PinholeCameraIntrinsic(
-        intr.width, intr.height, intr.fx, intr.fy, intr.ppx, intr.ppy
-    )
+def warmup(pipelines, n=30):
+    for _ in range(n):
+        for p in pipelines:
+            p.wait_for_frames()
 
-def get_pointcloud(pipeline, intrinsic, align, filters):
+def get_pointcloud_from_depth(pipeline, align, filters, depth_scale=1000.0, depth_trunc=3.0):
+    """
+    RealSense depth → rs.pointcloud() → numpy Nx3 → cupoch PointCloud
+    """
     try:
         frames = pipeline.wait_for_frames(timeout_ms=1000)
     except RuntimeError:
-        return None # 오류 발생 시 None 반환
-    
-    aligned_frames = align.process(frames)
-    depth_frame = aligned_frames.get_depth_frame()
-    if not depth_frame:
         return None
-        
+
+    frames = align.process(frames)
+    depth  = frames.get_depth_frame()
+    if not depth:
+        return None
+
     for f in filters:
-        depth_frame = f.process(depth_frame)
-        
-    depth_image = o3d.geometry.Image(np.asanyarray(depth_frame.get_data()))
-    pcd = o3d.geometry.PointCloud.create_from_depth_image(
-        depth_image, intrinsic, depth_scale=1000.0, depth_trunc=3.0
-    )
+        depth = f.process(depth)
+
+    # RealSense 포인트클라우드로 바로 변환
+    pc = rs.pointcloud()
+    points = pc.calculate(depth)
+    vtx = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)  # N x 3
+
+    # 유효 Z만 남기기
+    mask = np.isfinite(vtx).all(axis=1) & (vtx[:, 2] > 0) & (vtx[:, 2] < depth_trunc)
+    vtx = vtx[mask]
+    if vtx.size == 0:
+        return None
+
+    pcd = cph.geometry.PointCloud()
+    pcd.points = cph.utility.Vector3fVector(vtx.astype(np.float32))
     return pcd
 
-# --- [3] 메인 실행 영역 ---
+def merge_pointclouds(pcd_a, pcd_b):
+    """
+    cupoch PointCloud 두 개를 병합
+    """
+    a = np.asarray(pcd_a.points)
+    b = np.asarray(pcd_b.points)
+    merged = cph.geometry.PointCloud()
+    merged.points = cph.utility.Vector3fVector(
+        np.vstack([a, b]).astype(np.float32)
+    )
+    return merged
+
+# --- [3] 메인 실행 ---
 pipelines = []
-vis = o3d.visualization.Visualizer()
+vis = None
 is_vis_initialized = False
 
 try:
+    # 2대 장치 열거
+    if not hasattr(rs, "context"):
+        raise AttributeError("pyrealsense2에 context가 없습니다. import 경로 충돌을 먼저 해결하세요.")
     ctx = rs.context()
     serials = [dev.get_info(rs.camera_info.serial_number) for dev in ctx.query_devices()]
     if len(serials) < 2:
         raise RuntimeError("2대 이상의 RealSense 카메라가 필요합니다.")
-    
     print("연결된 카메라:", serials)
+
+    # 파이프라인 시작
     pipelines = [create_pipeline(s) for s in serials]
+
+    # 필터 준비
     depth_filters = [rs.decimation_filter(), rs.spatial_filter(), rs.temporal_filter(), rs.hole_filling_filter()]
 
     print("카메라 센서 안정화를 위해 잠시 대기합니다...")
-    for _ in range(30):
-        for pipe in pipelines:
-            pipe.wait_for_frames()
+    warmup(pipelines, n=30)
     print("안정화 완료.")
 
-    intrinsics = [get_intrinsics(p) for p in pipelines]
+    # 컬러 기준 정렬
     align_to_color = rs.align(rs.stream.color)
-    transform_matrix_cpu = np.load('transform_matrix.npy')
-    transform_matrix_gpu = o3d.core.Tensor(transform_matrix_cpu, o3d.core.float64, device)
-    
-    print(f"transform_matrix.npy 파일을 성공적으로 불러왔습니다.")
 
+    # 외부 행렬 로드 (cam2 → cam1)
+    T = np.load('transform_matrix.npy')  # 4x4
+    if T.shape != (4, 4):
+        raise ValueError("transform_matrix.npy는 4x4 행렬이어야 합니다.")
+    T = T.astype(np.float32)
+
+    # cupoch 시각화
+    vis = cph.visualization.Visualizer()
     is_vis_initialized = vis.create_window(window_name="Real-time Size Estimation (3D BBox)", width=1280, height=720)
     if not is_vis_initialized:
-        print("[경고] Open3D 시각화 창을 생성하지 못했습니다.")
+        print("[경고] 시각화 창 생성 실패")
 
+    # ROI AABB
+    min_bound = np.array([ROI_BOUNDS["min_x"], ROI_BOUNDS["min_y"], ROI_BOUNDS["min_z"]], dtype=np.float32)
+    max_bound = np.array([ROI_BOUNDS["max_x"], ROI_BOUNDS["max_y"], ROI_BOUNDS["max_z"]], dtype=np.float32)
+    roi_bbox = cph.geometry.AxisAlignedBoundingBox(min_bound=min_bound, max_bound=max_bound)
+    roi_bbox.color = (0.0, 1.0, 0.0)
 
-    min_bound_cpu = [ROI_BOUNDS["min_x"], ROI_BOUNDS["min_y"], ROI_BOUNDS["min_z"]]
-    max_bound_cpu = [ROI_BOUNDS["max_x"], ROI_BOUNDS["max_y"], ROI_BOUNDS["max_z"]]
-    roi_bbox = o3d.geometry.AxisAlignedBoundingBox(min_bound=min_bound_cpu, max_bound=max_bound_cpu)
-    roi_bbox.color = (0, 1, 0) # ROI는 초록색
-
-    roi_bbox_t = o3d.t.geometry.AxisAlignedBoundingBox.from_legacy(roi_bbox, device=device)
+    if is_vis_initialized:
+        vis.add_geometry(roi_bbox)
 
     while True:
-        pcd1_cpu = get_pointcloud(pipelines[0], intrinsics[0], align_to_color, depth_filters)
-        pcd2_cpu = get_pointcloud(pipelines[1], intrinsics[1], align_to_color, depth_filters)
+        # 두 카메라에서 포인트클라우드 획득
+        pcd1 = get_pointcloud_from_depth(pipelines[0], align_to_color, depth_filters)
+        pcd2 = get_pointcloud_from_depth(pipelines[1], align_to_color, depth_filters)
 
         if is_vis_initialized:
             vis.clear_geometries()
             vis.add_geometry(roi_bbox)
 
-        if pcd1_cpu is None or pcd2_cpu is None or pcd1_cpu.is_empty() or pcd2_cpu.is_empty():
-            if is_vis_initialized and not vis.poll_events(): break
-            if is_vis_initialized: vis.update_renderer()
+        if pcd1 is None or pcd2 is None or pcd1.is_empty() or pcd2.is_empty():
+            if is_vis_initialized and not vis.poll_events():
+                break
+            if is_vis_initialized:
+                vis.update_renderer()
             continue
-        
-        pcd1_t = o3d.t.geometry.PointCloud.from_legacy(pcd1_cpu, device=device)
-        pcd2_t = o3d.t.geometry.PointCloud.from_legacy(pcd2_cpu, device=device)
-        
-        pcd2_t.transform(transform_matrix_gpu)
-        merged_t = pcd1_t + pcd2_t
-        pcd_cropped_t = merged_t.crop(roi_bbox_t)
-        
-        object_detected = False
-        if len(pcd_cropped_t.point["positions"]) > 0:
-            
-            # 반복적 평면 제거 로직
-            remaining_pcd_t = pcd_cropped_t
-            min_points_in_plane = int(len(remaining_pcd_t.point["positions"]) * MIN_PLANE_RATIO)
 
-            while len(remaining_pcd_t.point["positions"]) > min_points_in_plane:
+        # 두 번째 카메라 포인트클라우드 정렬
+        pcd2_t = cph.geometry.PointCloud(pcd2)  # 복사
+        pcd2_t.transform(T)
+
+        # 병합 및 ROI 크롭
+        merged = merge_pointclouds(pcd1, pcd2_t)
+        cropped = merged.crop(roi_bbox)
+
+        object_detected = False
+
+        # 평면 반복 제거
+        n_pts = len(np.asarray(cropped.points))
+        if n_pts > 0:
+            remaining = cropped
+            min_inliers = int(n_pts * MIN_PLANE_RATIO)
+
+            while True:
+                total_pts = len(np.asarray(remaining.points))
+                if total_pts < min_inliers or total_pts == 0:
+                    break
                 try:
-                    _, inliers = remaining_pcd_t.segment_plane(
+                    plane_model, inliers = remaining.segment_plane(
                         distance_threshold=PLANE_DISTANCE_THRESHOLD,
                         ransac_n=3,
                         num_iterations=100
                     )
-                    if len(inliers) < min_points_in_plane:
+                    # inliers가 충분히 크지 않으면 중단
+                    if len(inliers) < min_inliers:
                         break
-                    remaining_pcd_t = remaining_pcd_t.select_by_index(inliers, invert=True)
+                    remaining = remaining.select_by_index(inliers, invert=True)
                 except Exception:
                     break
-            object_pcd_t = remaining_pcd_t
 
-            if len(object_pcd_t.point["positions"]) > 0:
-                labels = object_pcd_t.cluster_dbscan(eps=0.02, min_points=10, print_progress=False)
-                counts = np.bincount(labels.cpu().numpy()[labels.cpu().numpy() >= 0])
-                if len(counts) > 0:
-                    largest_cluster_label = counts.argmax()
-                    
-                    indices_np = np.where(labels.cpu().numpy() == largest_cluster_label)[0]
-                    indices_t = o3d.core.Tensor(indices_np, dtype=o3d.core.int64, device=device)
-                    final_object_pcd_t = object_pcd_t.select_by_index(indices_t)
-                    
-                    if len(final_object_pcd_t.point["positions"]) > 0:
-                        final_object_pcd_cpu = final_object_pcd_t.to_legacy()
-                        
-                        # 3D 바운딩 박스 계산
-                        oriented_bbox = final_object_pcd_cpu.get_oriented_bounding_box()
-                        dims_sorted = sorted(oriented_bbox.extent, reverse=True)
-                        length, width, height = dims_sorted[0], dims_sorted[1], dims_sorted[2]
-                        print(f"\r📏 최종 물체 크기 (m): L={length:.3f}, W={width:.3f}, H={height:.3f}", end="")
-                        
-                        oriented_bbox.color = (1, 0, 0) # 바운딩 박스는 빨간색
-                        
+            object_pcd = remaining
+
+            # 클러스터링으로 최대 군집만 선택
+            if not object_pcd.is_empty():
+                labels = np.asarray(object_pcd.cluster_dbscan(eps=DBSCAN_EPS, min_points=DBSCAN_MIN_POINTS, print_progress=False))
+                valid = labels >= 0
+                if valid.any():
+                    counts = np.bincount(labels[valid])
+                    largest_label = counts.argmax()
+                    indices = np.where(labels == largest_label)[0].astype(np.int64)
+                    final_obj = object_pcd.select_by_index(indices)
+
+                    if not final_obj.is_empty():
+                        # 바운딩 박스 계산
+                        try:
+                            obox = final_obj.get_oriented_bounding_box()
+                            extent = np.asarray(obox.extent, dtype=np.float32)
+                            length, width, height = np.sort(extent)[::-1]
+                            obox.color = (1.0, 0.0, 0.0)
+                        except Exception:
+                            # 일부 버전에서 OBB가 없을 수 있음 → AABB로 대체
+                            abox = final_obj.get_axis_aligned_bounding_box()
+                            extent = np.asarray(abox.get_extent(), dtype=np.float32)
+                            length, width, height = np.sort(extent)[::-1]
+                            abox.color = (1.0, 0.0, 0.0)
+                            obox = abox
+
+                        print(f"\r최종 물체 크기 (m): L={length:.3f}, W={width:.3f}, H={height:.3f}", end="")
+
                         if is_vis_initialized:
-                            vis.add_geometry(final_object_pcd_cpu)
-                            vis.add_geometry(oriented_bbox)
+                            vis.add_geometry(final_obj)
+                            vis.add_geometry(obox)
+
                         object_detected = True
-        
+
         if not object_detected:
+            # 이전 라인 지우기용 공백
             print("\r" + " " * 80, end="")
 
         if is_vis_initialized and not vis.poll_events():
             break
-        if is_vis_initialized: vis.update_renderer()
+        if is_vis_initialized:
+            vis.update_renderer()
 
 except (KeyboardInterrupt, SystemExit):
     print("\n프로그램을 종료합니다.")
 except Exception as e:
-    import traceback
     print(f"\n오류 발생: {e}")
     traceback.print_exc()
 finally:
-    for pipe in pipelines:
-        pipe.stop()
-    if is_vis_initialized:
+    for p in pipelines:
+        try:
+            p.stop()
+        except Exception:
+            pass
+    if is_vis_initialized and vis is not None:
         vis.destroy_window()
     print("\n안전하게 종료되었습니다.")
