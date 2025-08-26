@@ -10,6 +10,7 @@ from typing import Optional, Tuple, List, Dict, Any
 import numpy as np
 import cv2 as cv
 
+
 TICK = 0.20
 LOG_EVERY_DECODE = 1
 MAX_BACKOFF = 1.0
