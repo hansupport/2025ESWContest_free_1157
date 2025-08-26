@@ -1,0 +1,84 @@
+embedding:
+  cam_dev: "/dev/video2"
+  pixfmt: "YUYV"
+  width: 848
+  height: 480
+  fps: 6
+  input_size: 128
+  out_dim: 128
+  width_scale: 0.35
+  fp16: false
+  use_depthwise: false
+  use_bn: false
+  pinned: false
+  roi_px: [540, 540]        # img2emb 전용 ROI (w,h) — RGB 메인 ROI
+  roi_offset: [103, -260]   # (dx,dy)
+  weights_path: null
+  e2e_warmup_frames: 60
+  e2e_pregrab: 8
+
+depth:
+  width: 1280
+  height: 720
+  fps: 6
+  roi_px: [260, 260]        # Depth 메인 ROI
+  roi_offset: [50, -110]    # (dx,dy)
+  DECIM: 1
+  PLANE_TAU: 0.004
+  H_MIN_BASE: 0.003
+  H_MAX: 0.4
+  MIN_OBJ_PIX: 40
+  BOTTOM_ROI_RATIO: 0.20
+  HOLE_FILL: false
+  CORE_MARGIN_PX: 1
+  P_LO: 1.0
+  P_HI: 99.0
+
+datamatrix:
+  camera: 2
+  prefer_res: [1920, 1080]
+  prefer_fps: 6
+  decode_interval: 0.20     # 기본 주기
+  log_every_decode: 0
+  max_backoff: 1.0
+  # 다중 ROI 목록(name, size[w,h], offset[dx,dy], hflip)
+  rois:
+    - name: ROI_LEFT_MIRROR
+      size: [240, 460]
+      offset: [-380, -170]
+      hflip: true
+    - name: ROI_RIGHT_MIRROR
+      size: [270, 440]
+      offset: [630, -170]
+      hflip: true
+    - name: ROI_MAIN
+      size: [540, 540]
+      offset: [103, -260]
+      hflip: false
+
+quality:
+  q_warn: 0.30
+
+storage:
+  sqlite_path: "pack.db"
+
+model:
+  type: "centroid"          # "centroid" | "lgbm"
+  centroids_path: "centroids.npz"
+  lgbm_path: "lgbm.pkl"
+  topk: 3
+
+lgbm:
+  n_estimators: 200
+  num_leaves: 31
+  learning_rate: 0.05
+  min_data_in_leaf: 10
+  feature_fraction: 0.8
+  bagging_fraction: 0.8
+  bagging_freq: 1
+  class_weight: "balanced"
+  seed: 42
+
+training:
+  min_count: 2
+  min_q: 0.0

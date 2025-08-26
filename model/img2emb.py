@@ -7,7 +7,7 @@
 #  - depthwise 비활성 옵션(--no_depthwise)
 #  - BatchNorm 제거 옵션(--no_bn)
 #  - 내부 구간 프로파일(--profile)
-#  - ROI 기본값=(280,96,288,288)
+#  - ROI: 절대좌표(ROI=(x,y,w,h))와 중심기준(ROI_PX=(w,h), ROI_OFF=(dx,dy)) 모두 지원
 #  - 엔드투엔드 워밍업(--e2e_warmup), 사전 grab(--pregrab)
 #  - OpenCV 스레드 초기화 비용 축소(cv2.setNumThreads(1))
 
@@ -42,7 +42,11 @@ NO_BN = False
 USE_PINNED = False
 
 # ROI 기본값
+# 1) 절대좌표 방식: (x,y,w,h)
 ROI = (280, 96, 288, 288)
+# 2) 중심기준 방식: (w,h), (dx,dy) — 두 값이 모두 설정되면 이 방식을 우선 사용
+ROI_PX = None
+ROI_OFF = None
 
 # ========= 시간/로그 =========
 T0 = time.perf_counter()
@@ -62,19 +66,43 @@ def l2_normalize(x, eps=1e-12):
     n = np.linalg.norm(x, ord=2, axis=-1, keepdims=True)
     return x / (n + eps)
 
-def safe_crop(img, roi):
-    if roi is None: return img
+def _safe_crop_xywh(img, x, y, w, h):
     H, W = img.shape[:2]
-    x, y, w, h = map(int, roi)
     x2, y2 = x + w, y + h
-    x, y = max(0, x), max(0, y)
-    x2, y2 = min(W, x2), min(H, y2)
+    x  = max(0, x);  y  = max(0, y)
+    x2 = min(W, x2); y2 = min(H, y2)
     if x >= x2 or y >= y2:
-        raise ValueError(f"ROI out of bounds: img=({W}x{H}), roi={roi}")
+        raise ValueError(f"ROI out of bounds: img=({W}x{H}), roi={(x,y,w,h)}")
     return img[y:y2, x:x2]
 
+def _compute_center_roi_xy(img, px_wh, off_xy):
+    H, W = img.shape[:2]
+    rw, rh = map(int, px_wh)
+    dx, dy = map(int, off_xy)
+    rw = max(1, min(rw, W))
+    rh = max(1, min(rh, H))
+    cx = W // 2 + dx
+    cy = H // 2 + dy
+    x = max(0, min(W - rw, cx - rw // 2))
+    y = max(0, min(H - rh, cy - rh // 2))
+    return x, y, rw, rh
+
+def safe_crop(img, roi):
+    if roi is None:
+        return img
+    x, y, w, h = map(int, roi)
+    return _safe_crop_xywh(img, x, y, w, h)
+
 def preprocess_bgr(img_bgr, size=INPUT_SIZE):
-    img = safe_crop(img_bgr, ROI)
+    # ROI 우선순위: 중심기준(ROI_PX/ROI_OFF) → 절대좌표(ROI) → 전체
+    if ROI_PX is not None and ROI_OFF is not None:
+        x, y, w, h = _compute_center_roi_xy(img_bgr, ROI_PX, ROI_OFF)
+        img = _safe_crop_xywh(img_bgr, x, y, w, h)
+    elif ROI is not None:
+        img = safe_crop(img_bgr, ROI)
+    else:
+        img = img_bgr
+
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     if (img.shape[1], img.shape[0]) != (size, size):
         img = cv2.resize(img, (size, size), interpolation=cv2.INTER_AREA)
@@ -273,6 +301,16 @@ class TorchTinyMNetEmbedder:
         with self.amp(enabled=self.fp16): f = self.model(x)
         return l2_normalize(f.float().cpu().numpy())
 
+# ========= ROI 유틸: 중심기준 세터 =========
+def set_center_roi(px_wh, offset_xy):
+    global ROI_PX, ROI_OFF, ROI
+    ROI_PX = tuple(map(int, px_wh)) if px_wh is not None else None
+    ROI_OFF = tuple(map(int, offset_xy)) if offset_xy is not None else None
+    # 중심기준을 쓰면 ROI 절대좌표는 비활성화
+    if ROI_PX is not None and ROI_OFF is not None:
+        ROI = None
+    vlog(f"set_center_roi px={ROI_PX} off={ROI_OFF}")
+
 # ========= Embedder factory =========
 def build_embedder_from_flags():
     return TorchTinyMNetEmbedder(out_dim=EMBED_DIM, width=WIDTH_SCALE, size=INPUT_SIZE,
@@ -347,13 +385,20 @@ def roi_snapshot_from_cap(cap, out_path="ROI_snapshot.jpg", annotate=True):
     if not ok:
         print("[roi_snap] 프레임 획득 실패", file=sys.stderr); return False
     draw = img.copy()
-    if ROI is not None:
+    # 중심기준이 설정되어 있으면 그것 기준으로 박스 그려줌
+    if ROI_PX is not None and ROI_OFF is not None:
+        x, y, w, h = _compute_center_roi_xy(img, ROI_PX, ROI_OFF)
+        cv2.rectangle(draw, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        info = f"{img.shape[1]}x{img.shape[0]} ROI_CENTER(px={ROI_PX}, off={ROI_OFF}) -> xywh=({x},{y},{w},{h})"
+    elif ROI is not None:
         x, y, w, h = map(int, ROI)
         cv2.rectangle(draw, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        info = f"{img.shape[1]}x{img.shape[0]} ROI_XYWH={ROI}"
+    else:
+        info = f"{img.shape[1]}x{img.shape[0]} ROI=None"
     if annotate:
-        H, W = img.shape[:2]
-        cv2.putText(draw, f"{W}x{H} ROI={ROI}", (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,255,0), 2)
+        cv2.putText(draw, info, (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
     cv2.imwrite(out_path, draw)
     print(f"[roi_snap] 저장 완료: {out_path}")
     return True
@@ -364,7 +409,7 @@ def diag_env():
     print("[env]", "cudnn.enabled:", torch.backends.cudnn.enabled)
     print("[env]", "cudnn.benchmark:", torch.backends.cudnn.benchmark)
     print("[env]", "cv2:", cv2.__version__)
-    print("[env]", "ROI:", ROI)
+    print("[env]", "ROI_XYWH:", ROI, "ROI_CENTER(px/off):", ROI_PX, ROI_OFF)
 
 def diag_fps_headless(emb, cap, frames=60):
     if not cap or not cap.isOpened():
@@ -456,20 +501,13 @@ def realtime_demo_headless(emb, cap, print_every=30):
             fps = n / (time.perf_counter()-t0+1e-6)
             print(f"fps≈{fps:.2f}", flush=True)
 
-# ========= Embedder factory와 I/O 엔트리 =========
-def build_embedder_from_flags():
-    return TorchTinyMNetEmbedder(out_dim=EMBED_DIM, width=WIDTH_SCALE, size=INPUT_SIZE,
-                                 fp16=USE_FP16, weights_path=(PRETRAINED_PATH if PRETRAINED else None),
-                                 channels_last=CHANNELS_LAST, cudnn_benchmark=CUDNN_BENCHMARK,
-                                 warmup_steps=WARMUP_STEPS, use_depthwise=(not NO_DEPTHWISE),
-                                 use_bn=(not NO_BN), pinned=USE_PINNED)
-
 # ========= CLI =========
 def main():
     global PRETRAINED, PRETRAINED_MODE, PRETRAINED_PATH
     global INPUT_SIZE, EMBED_DIM, WIDTH_SCALE, USE_FP16, CHANNELS_LAST, FRAME_SKIP_N
     global VERBOSE, CUDNN_BENCHMARK, WARMUP_STEPS, TIME_LOG, PROFILE
     global NO_DEPTHWISE, NO_BN, USE_PINNED
+    global ROI, ROI_PX, ROI_OFF
 
     ap = argparse.ArgumentParser()
     # 로깅/성능
@@ -507,6 +545,10 @@ def main():
     ap.add_argument("--cam_h", type=int, default=None)
     ap.add_argument("--cam_fps", type=int, default=None)
     ap.add_argument("--cam_pixfmt", type=str, default="YUYV", help="YUYV|MJPG|AUTO")
+    # ROI 옵션
+    ap.add_argument("--roi", type=int, nargs=4, default=None, help="절대좌표 ROI: x y w h")
+    ap.add_argument("--roi_px", type=int, nargs=2, default=None, help="중심기준 ROI 폭높이: w h")
+    ap.add_argument("--roi_off", type=int, nargs=2, default=None, help="중심기준 ROI 오프셋: dx dy")
     # 출력 제어
     ap.add_argument("--print_k", type=int, default=8)
     ap.add_argument("--save_npy", type=str, default=None)
@@ -538,6 +580,14 @@ def main():
     NO_DEPTHWISE = bool(args.no_depthwise)
     NO_BN = bool(args.no_bn)
     USE_PINNED = bool(args.pinned)
+
+    # ROI 파싱
+    if args.roi_px is not None and args.roi_off is not None:
+        set_center_roi(args.roi_px, args.roi_off)
+    elif args.roi is not None:
+        ROI = tuple(map(int, args.roi))
+        ROI_PX = None; ROI_OFF = None
+        vlog(f"set ROI_XYWH={ROI}")
 
     # cuDNN on/off
     if args.no_cudnn:
