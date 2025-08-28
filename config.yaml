@@ -9,17 +9,17 @@ embedding:
   input_size: 128
   out_dim: 128
   width_scale: 0.35
-  fp16: true            # Jetson Nano에서 권장 (가능하면)
-  use_depthwise: true   # 프리트레인과 동일하게
-  use_bn: true          # 프리트레인과 동일하게
-  pinned: false
+  fp16: false          # ONNX CPU → 비활성화
+  use_depthwise: false # ← 학습 기본값을 썼다면 false
+  use_bn: false        # ← 학습 기본값을 썼다면 false
+  pinned: false        # ONNX 경로에선 의미 거의 없음(무시 가능)
 
   # img2emb 전용 ROI (center-based, w,h / dx,dy)
   roi_px: [530, 530]
   roi_offset: [90, -130]
 
-  # 사전학습 가중치 경로(런타임에 로드)
-  weights_path: "model/weights/tinymnet_emb_128d_w035.pth"
+  # 런타임에 로드할 ONNX 모델 경로
+  weights_path: "model/weights/tinymnet_emb_128d_w035.onnx"
 
   # E2E warmup
   e2e_warmup_frames: 12

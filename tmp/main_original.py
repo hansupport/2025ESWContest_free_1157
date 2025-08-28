@@ -1,4 +1,5 @@
-# main.py
+# main.py (ONNXRuntime 전환 버전)
+# -*- coding: utf-8 -*-
 # - YAML/JSON 설정 로딩
 # - depth/img2emb/datamatrix에 설정값 주입
 # - SQLite 로깅(모든 샘플 기록) — DB 오픈 가속(스키마 1회/종료 시 WAL truncate)
@@ -9,6 +10,7 @@
 # - 모델: centroid + LGBM 동시 지원(파일 변경 자동 리로드, config.model.type로 추론 우선순위 선택)
 # - 추론: 학습과 동일한 L2정규화, top-1 확률 임계 미달 시 3~5프레임 이동평균/다수결로 확정
 # - (FIX) centroid 확률: softmax(top-k) 대신 margin(sigmoid)로 ‘확신도’ 산출
+# - (NEW) img2emb.py가 ONNXRuntime 기반으로 교체됨에 따라 torch 의존 제거
 
 import os
 import sys
@@ -22,7 +24,6 @@ from typing import Optional, List, Dict, Any, Union, Deque, Tuple
 
 import numpy as np
 import cv2
-import torch
 from collections import deque, Counter
 
 # ===== 경로 세팅 =====
@@ -101,12 +102,12 @@ EMB_CAM_H     = int(CFG.get("embedding",{}).get("height", 480))
 EMB_CAM_FPS   = int(CFG.get("embedding",{}).get("fps", 6))
 EMB_INPUT_SIZE= int(CFG.get("embedding",{}).get("input_size", 128))
 EMB_OUT_DIM   = int(CFG.get("embedding",{}).get("out_dim", 128))
-EMB_WIDTH     = float(CFG.get("embedding",{}).get("width_scale", 0.35))
-EMB_USE_FP16  = bool(CFG.get("embedding",{}).get("fp16", False))
-EMB_USE_DW    = bool(CFG.get("embedding",{}).get("use_depthwise", False))
-EMB_USE_BN    = bool(CFG.get("embedding",{}).get("use_bn", False))
-EMB_PINNED    = bool(CFG.get("embedding",{}).get("pinned", False))
-EMB_WEIGHTS_PATH  = CFG.get("embedding",{}).get("weights_path", None)
+EMB_WIDTH     = float(CFG.get("embedding",{}).get("width_scale", 0.35))   # ONNX 경로에선 미사용
+EMB_USE_FP16  = bool(CFG.get("embedding",{}).get("fp16", False))           # ONNX 경로에선 미사용
+EMB_USE_DW    = bool(CFG.get("embedding",{}).get("use_depthwise", False))  # ONNX 경로에선 미사용
+EMB_USE_BN    = bool(CFG.get("embedding",{}).get("use_bn", False))         # ONNX 경로에선 미사용
+EMB_PINNED    = bool(CFG.get("embedding",{}).get("pinned", False))         # ONNX 경로에선 미사용
+EMB_WEIGHTS_PATH  = CFG.get("embedding",{}).get("weights_path", None)      # <-- ONNX 파일 경로(.onnx)
 E2E_WARMUP_FRAMES = int(CFG.get("embedding",{}).get("e2e_warmup_frames", 60))
 E2E_PREGRAB       = int(CFG.get("embedding",{}).get("e2e_pregrab", 8))
 
@@ -186,28 +187,18 @@ def warmup_opencv_kernels():
     k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     _ = cv2.morphologyEx(dummy, cv2.MORPH_OPEN, k, iterations=1)
     _ = cv2.Canny(dummy, 40, 120)
-    print("[warmup] OpenCV done")
+    print("[warmup] OpenCV done]")
 
-def warmup_torch_cuda():
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[warmup] Torch start (device={dev})")
+def warmup_runtime_info():
+    """ONNXRuntime/환경 정보 출력 (torch 대체)"""
+    print("[warmup] Runtime start (ONNX path)")
     try:
-        x = torch.randn(1, 3, 128, 128, device=dev)
-        m = torch.nn.Sequential(
-            torch.nn.Conv2d(3, 16, 3, padding=1),
-            torch.nn.ReLU(inplace=True),
-            torch.nn.Conv2d(16, 16, 3, padding=1),
-            torch.nn.AdaptiveAvgPool2d((1, 1)),
-            torch.nn.Flatten(),
-            torch.nn.Linear(16, 64)
-        ).to(dev).eval()
-        with torch.inference_mode():
-            for _ in range(3):
-                _ = m(x)
-                if dev == "cuda": torch.cuda.synchronize()
-        print("[warmup] Torch done")
+        # img2emb.diag_env()가 onnxruntime/providers, cv2 버전 출력
+        if hasattr(embmod, "diag_env"):
+            embmod.diag_env()
     except Exception as e:
-        print(f"[warmup] Torch error: {e}")
+        print("[warmup] runtime info skipped:", e)
+    print("[warmup] Runtime done")
 
 # ==========================
 # img2emb
@@ -231,22 +222,20 @@ def apply_img2emb_roi_from_cfg():
 
 def build_embedder_only():
     apply_img2emb_roi_from_cfg()
-    print("[warmup] img2emb: build embedder")
-    emb = embmod.TorchTinyMNetEmbedder(
-        out_dim=EMB_OUT_DIM,
-        width=EMB_WIDTH,
-        size=EMB_INPUT_SIZE,
-        fp16=EMB_USE_FP16,
-        weights_path=EMB_WEIGHTS_PATH,
-        channels_last=False,
-        cudnn_benchmark=False,
-        warmup_steps=3,
-        use_depthwise=EMB_USE_DW,
-        use_bn=EMB_USE_BN,
-        pinned=EMB_PINNED
-    )
-    print("[warmup] img2emb: embedder ready")
-    return emb
+    print("[warmup] img2emb: build embedder (ONNXRuntime)")
+    # 우선 OnnxEmbedder 직접 생성, 없으면 build_embedder_from_flags() 폴백
+    if EMB_WEIGHTS_PATH is None or not Path(EMB_WEIGHTS_PATH).exists():
+        raise RuntimeError("[img2emb] ONNX 파일 경로(embedding.weights_path)가 유효하지 않습니다.")
+    try:
+        if hasattr(embmod, "OnnxEmbedder"):
+            emb = embmod.OnnxEmbedder(onnx_path=EMB_WEIGHTS_PATH, size=EMB_INPUT_SIZE, out_dim=EMB_OUT_DIM)
+        else:
+            # img2emb.py가 내부 플래그를 사용하는 경우를 위한 폴백
+            emb = embmod.build_embedder_from_flags()
+        print("[warmup] img2emb: embedder ready")
+        return emb
+    except Exception as e:
+        raise RuntimeError(f"[img2emb] embedder 생성 실패: {e}")
 
 def open_embed_camera():
     cap = embmod.open_camera(
@@ -278,7 +267,6 @@ def embed_one_frame(emb, pregrab=3):
         ok, bgr = cap.read()
         if not ok: return None
         v = emb.embed_bgr(bgr)
-        if torch.cuda.is_available(): torch.cuda.synchronize()
         return v.astype(np.float32)
     finally:
         try: cap.release()
@@ -454,16 +442,14 @@ def e2e_warmup_now_shared(emb, frames: int = E2E_WARMUP_FRAMES, pregrab: int = E
             for _ in range(max(0, pregrab)):
                 _ = dm_read_frame(DM_CAM_PERSIST)
         t0 = time.time(); n_ok = 0
-        with torch.inference_mode():
-            for _ in range(max(1, frames)):
-                with DM_CAM_LOCK:
-                    bgr = dm_read_frame(DM_CAM_PERSIST)
-                if bgr is None:
-                    time.sleep(0.003)
-                    continue
-                _ = emb.embed_bgr(bgr)
-                n_ok += 1
-        if torch.cuda.is_available(): torch.cuda.synchronize()
+        for _ in range(max(1, frames)):
+            with DM_CAM_LOCK:
+                bgr = dm_read_frame(DM_CAM_PERSIST)
+            if bgr is None:
+                time.sleep(0.003)
+                continue
+            _ = emb.embed_bgr(bgr)
+            n_ok += 1
         print(f"[warmup] img2emb: shared e2e done, ok_frames={n_ok}, elapsed={time.time()-t0:.2f}s")
         return
     print("[warmup] img2emb: separate device warmup path")
@@ -485,7 +471,6 @@ def embed_one_frame_shared(emb, pregrab=3):
         if bgr is None:
             return None
         v = emb.embed_bgr(bgr)
-        if torch.cuda.is_available(): torch.cuda.synchronize()
         return v.astype(np.float32)
     return embed_one_frame(emb, pregrab=pregrab)
 
@@ -820,7 +805,7 @@ def main():
     print("[init] start")
     maybe_run_jetson_perf()
     warmup_opencv_kernels()
-    warmup_torch_cuda()
+    warmup_runtime_info()   # torch 워밍업 대체
 
     # DB
     conn = open_db(DB_PATH)
@@ -1126,5 +1111,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    

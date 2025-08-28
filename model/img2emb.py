@@ -1,22 +1,27 @@
-# img2emb.py
-# Jetson Nano: OpenCV CPU + PyTorch CUDA
+# img2emb.py (ONNXRuntime CPU-only)
+# Jetson Nano: OpenCV CPU + ONNXRuntime
 # 최적화 포인트:
-#  - torch.inference_mode()
-#  - GPU 입력 버퍼 사전할당 + pinned CPU 메모리 옵션(--pinned)
-#  - cuDNN 비활성 옵션(--no_cudnn)
-#  - depthwise 비활성 옵션(--no_depthwise)
-#  - BatchNorm 제거 옵션(--no_bn)
-#  - 내부 구간 프로파일(--profile)
+#  - ONNXRuntime CPUExecutionProvider
 #  - ROI: 절대좌표(ROI=(x,y,w,h))와 중심기준(ROI_PX=(w,h), ROI_OFF=(dx,dy)) 모두 지원
+#  - 내부 구간 프로파일(--profile)
 #  - 엔드투엔드 워밍업(--e2e_warmup), 사전 grab(--pregrab)
 #  - OpenCV 스레드 초기화 비용 축소(cv2.setNumThreads(1))
+#
+# NOTE:
+#  - PyTorch 관련 옵션(--no_cudnn, --no_fp16, --channels_last, --pinned 등)은
+#    하위호환을 위해 파싱만 하고 무시됩니다(경고 출력).
 
 import os, sys, time, glob, csv, argparse, select
 from pathlib import Path
 import numpy as np
 import cv2
-import torch
-import torch.nn as nn
+
+# ===== ONNXRuntime =====
+try:
+    import onnxruntime as ort
+except Exception as e:
+    print("[ERR] onnxruntime 를 불러올 수 없습니다. `pip install onnxruntime` 후 다시 실행하세요.", file=sys.stderr)
+    raise
 
 # OpenCV 스레드 풀 초기화 고정
 try:
@@ -25,21 +30,21 @@ except Exception:
     pass
 
 # ========= 전역 기본값 =========
-PRETRAINED = False
-PRETRAINED_MODE = "jit"                 # "jit" or "pth"
-PRETRAINED_PATH = "mobilenetv3_small_emb.ts"
+PRETRAINED = True
+PRETRAINED_MODE = "onnx"               # 호환용 필드(미사용). onnx 고정.
+PRETRAINED_PATH = "mobilenetv3_small_emb.onnx"
 
 EMBED_DIM = 256
 INPUT_SIZE = 224
-WIDTH_SCALE = 1.0
-USE_FP16 = True
-CHANNELS_LAST = False
+WIDTH_SCALE = 1.0                      # 호환용(ONNX에서 미사용)
+USE_FP16 = False                       # 호환용(ONNX에서 미사용)
+CHANNELS_LAST = False                  # 호환용(ONNX에서 미사용)
 FRAME_SKIP_N = 1
-CUDNN_BENCHMARK = False
-WARMUP_STEPS = 0
-NO_DEPTHWISE = False
-NO_BN = False
-USE_PINNED = False
+CUDNN_BENCHMARK = False                # 호환용(ONNX에서 미사용)
+WARMUP_STEPS = 0                       # (batched images path에서만 의미)
+NO_DEPTHWISE = False                   # 호환용(ONNX에서 미사용)
+NO_BN = False                          # 호환용(ONNX에서 미사용)
+USE_PINNED = False                     # 호환용(ONNX에서 미사용)
 
 # ROI 기본값
 # 1) 절대좌표 방식: (x,y,w,h)
@@ -134,172 +139,51 @@ def save_matrix_and_index(pairs, out_dir):
         for i, n in enumerate(names): w.writerow([i, n])
     print("저장 완료:", out / "embeddings.npy", ",", out / "index.csv")
 
-# ========= 모델 =========
-class ConvBNAct(nn.Module):
-    def __init__(self, in_ch, out_ch, k=3, s=1, g=1, act=True, use_bn=True):
-        super().__init__()
-        self.conv = nn.Conv2d(in_ch, out_ch, k, s, k//2, groups=g, bias=(not use_bn))
-        self.bn   = nn.BatchNorm2d(out_ch) if use_bn else None
-        self.act  = nn.ReLU(inplace=True) if act else nn.Identity()
-    def forward(self, x):
-        x = self.conv(x)
-        if self.bn is not None: x = self.bn(x)
-        x = self.act(x)
-        return x
+# ========= ONNX Embedder =========
+class OnnxEmbedder:
+    def __init__(self, onnx_path, size=INPUT_SIZE, out_dim=EMBED_DIM):
+        if not onnx_path or not os.path.exists(onnx_path):
+            raise FileNotFoundError(f"ONNX 파일이 없습니다: {onnx_path}")
+        self.size = int(size)
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = 1  # Jetson Nano: 과도한 스레드 방지
+        self.session = ort.InferenceSession(
+            onnx_path,
+            sess_options=so,
+            providers=["CPUExecutionProvider"]
+        )
+        self.inp = self.session.get_inputs()[0].name
+        self.out = self.session.get_outputs()[0].name
+        self.out_dim = int(out_dim)
 
-class InvertedResidual(nn.Module):
-    def __init__(self, in_ch, out_ch, stride, expand, use_depthwise=True, use_bn=True):
-        super().__init__()
-        hidden = int(round(in_ch * expand))
-        self.use_res = (stride == 1 and in_ch == out_ch)
-        layers = []
-        if expand != 1.0:
-            layers.append(ConvBNAct(in_ch, hidden, k=1, s=1, use_bn=use_bn))
-        g = hidden if use_depthwise else 1
-        layers += [
-            ConvBNAct(hidden, hidden, k=3, s=stride, g=g, use_bn=use_bn),
-            ConvBNAct(hidden, out_ch, k=1, s=1, act=False, use_bn=use_bn)
-        ]
-        self.block = nn.Sequential(*layers)
-    def forward(self, x):
-        out = self.block(x)
-        return x + out if self.use_res else out
+    def _run(self, X: np.ndarray) -> np.ndarray:
+        # X: [N,3,H,W], float32
+        y = self.session.run([self.out], {self.inp: X})[0]  # [N,D]
+        return y
 
-class TinyMobileNet(nn.Module):
-    def __init__(self, out_dim=EMBED_DIM, width=WIDTH_SCALE, use_depthwise=True, use_bn=True):
-        super().__init__()
-        def c(ch): return max(8, int(ch * width))
-        self.stem = ConvBNAct(3, c(16), k=3, s=2, use_bn=use_bn)
-        self.layer1 = InvertedResidual(c(16),  c(24), 2, 2.0, use_depthwise, use_bn)
-        self.layer2 = InvertedResidual(c(24),  c(24), 1, 2.0, use_depthwise, use_bn)
-        self.layer3 = InvertedResidual(c(24),  c(40), 2, 2.5, use_depthwise, use_bn)
-        self.layer4 = InvertedResidual(c(40),  c(40), 1, 2.5, use_depthwise, use_bn)
-        self.layer5 = InvertedResidual(c(40),  c(80), 2, 2.5, use_depthwise, use_bn)
-        self.layer6 = InvertedResidual(c(80),  c(80), 1, 2.5, use_depthwise, use_bn)
-        self.head   = ConvBNAct(c(80), c(128), k=1, s=1, use_bn=use_bn)
-        self.pool   = nn.AdaptiveAvgPool2d(1)
-        self.fc     = nn.Linear(c(128), out_dim)
-        self.out_dim = out_dim
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d): nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
-            elif isinstance(m, nn.BatchNorm2d): nn.init.ones_(m.weight); nn.init.zeros_(m.bias)
-        nn.init.normal_(self.fc.weight, 0, 0.01); nn.init.zeros_(self.fc.bias)
-    def forward(self, x):
-        x = self.stem(x)
-        x = self.layer1(x); x = self.layer2(x)
-        x = self.layer3(x); x = self.layer4(x)
-        x = self.layer5(x); x = self.layer6(x)
-        x = self.head(x); x = self.pool(x).flatten(1)
-        return self.fc(x)
-
-# ========= Embedders =========
-class TorchTinyMNetEmbedder:
-    def __init__(self, out_dim=EMBED_DIM, width=WIDTH_SCALE, size=INPUT_SIZE,
-                 fp16=USE_FP16, weights_path=None, channels_last=CHANNELS_LAST,
-                 cudnn_benchmark=CUDNN_BENCHMARK, warmup_steps=WARMUP_STEPS,
-                 use_depthwise=(not NO_DEPTHWISE), use_bn=(not NO_BN),
-                 pinned=USE_PINNED):
-        if not torch.cuda.is_available(): raise RuntimeError("CUDA 필요")
-        self.device="cuda"; self.size=int(size); self.fp16=bool(fp16)
-        self.channels_last = bool(channels_last)
-        self.pinned = bool(pinned)
-        torch.backends.cudnn.benchmark = bool(cudnn_benchmark)
-
-        vlog("TinyMobileNet build")
-        self.model = TinyMobileNet(out_dim=out_dim, width=width,
-                                   use_depthwise=use_depthwise, use_bn=use_bn).to(self.device).eval()
-        if weights_path and os.path.exists(weights_path):
-            vlog(f"load weights {weights_path}"); t0=time.perf_counter()
-            state=torch.load(weights_path, map_location="cpu")
-            if isinstance(state, dict) and "state_dict" in state: state=state["state_dict"]
-            if isinstance(state, dict): state={k.replace("module.",""):v for k,v in state.items()}
-            self.model.load_state_dict(state, strict=False)
-            vlog(f"weights loaded ({time.perf_counter()-t0:.3f}s)")
-        else:
-            vlog("no pretrained weights")
-
-        # dtype/메모리 포맷
-        self.dtype = torch.float16 if self.fp16 else torch.float32
-        if self.fp16: self.model.half(); vlog("half()")
-        if self.channels_last:
-            try: self.model.to(memory_format=torch.channels_last); vlog("channels_last")
-            except Exception: vlog("channels_last skipped")
-
-        # GPU 입력 버퍼 사전할당
-        self.x_gpu = torch.empty(1,3,self.size,self.size, device=self.device, dtype=self.dtype)
-        if self.channels_last:
-            try: self.x_gpu = self.x_gpu.to(memory_format=torch.channels_last)
-            except Exception: pass
-
-        # CPU pinned 버퍼 사전할당(+NumPy 뷰) → 매 호출 pin_memory() 비용 제거
-        self.x_cpu = None
-        self.x_cpu_np = None
-        if self.pinned:
-            self.x_cpu = torch.empty(1,3,self.size,self.size, dtype=torch.float32, pin_memory=True)
-            try:
-                self.x_cpu_np = self.x_cpu.numpy()
-            except Exception:
-                self.x_cpu_np = None
-
-        self.amp = torch.cuda.amp.autocast
-        if warmup_steps>0:
-            vlog(f"warmup({warmup_steps})...")
-            with torch.inference_mode():
-                for _ in range(warmup_steps):
-                    with self.amp(enabled=self.fp16): _=self.model(self.x_gpu)
-                torch.cuda.synchronize()
-            vlog("warmup done")
-
-    @torch.inference_mode()
-    def embed_bgr(self, img_bgr):
+    def embed_bgr(self, img_bgr: np.ndarray) -> np.ndarray:
         t0 = time.perf_counter()
-        X = preprocess_bgr(img_bgr, size=self.size)                # numpy [1,3,H,W]
+        X = preprocess_bgr(img_bgr, size=self.size)                # [1,3,H,W]
         t1 = time.perf_counter()
-
-        # H2D: 사전할당 pinned 버퍼가 있으면 그쪽으로 복사 후 GPU로 비동기 전송
-        if self.pinned and (self.x_cpu is not None) and (self.x_cpu_np is not None):
-            np.copyto(self.x_cpu_np, X, casting="no")              # CPU memcpy 고정 크기
-            t2 = time.perf_counter()
-            self.x_gpu.copy_(self.x_cpu.to(self.dtype), non_blocking=True)
-        else:
-            t_cpu = torch.from_numpy(X)                            # fallback
-            if self.pinned: t_cpu = t_cpu.pin_memory()
-            t2 = time.perf_counter()
-            self.x_gpu.copy_(t_cpu.to(self.dtype), non_blocking=self.pinned)
-        torch.cuda.synchronize()
+        f = self._run(X)                                           # [1,D]
+        t2 = time.perf_counter()
+        v = l2_normalize(f[0])                                     # [D]
         t3 = time.perf_counter()
-
-        with self.amp(enabled=self.fp16):
-            f = self.model(self.x_gpu)
-        torch.cuda.synchronize()
-        t4 = time.perf_counter()
-
-        y = f.squeeze(0).float().cpu().numpy()                     # D2H
-        t5 = time.perf_counter()
-        v = l2_normalize(y)
-        t6 = time.perf_counter()
 
         if PROFILE:
             print("[profile]",
                   f"preproc_ms={(t1-t0)*1000:.1f}",
-                  f"cpu_tensor_ms={(t2-t1)*1000:.1f}",
-                  f"H2D_ms={(t3-t2)*1000:.1f}",
-                  f"forward_ms={(t4-t3)*1000:.1f}",
-                  f"D2H_ms={(t5-t4)*1000:.1f}",
-                  f"norm_ms={(t6-t5)*1000:.1f}",
-                  f"total_ms={(t6-t0)*1000:.1f}",
+                  f"forward_ms={(t2-t1)*1000:.1f}",
+                  f"norm_ms={(t3-t2)*1000:.1f}",
+                  f"total_ms={(t3-t0)*1000:.1f}",
                   flush=True)
-        return v
+        return v.astype(np.float32)
 
-    @torch.inference_mode()
-    def embed_batch_np(self, batch_np):
-        X = np.concatenate(batch_np, 0)
-        t_cpu = torch.from_numpy(X)
-        if self.pinned: t_cpu = t_cpu.pin_memory()
-        x = torch.empty_like(t_cpu, device=self.device, dtype=self.dtype)
-        x.copy_(t_cpu.to(self.dtype), non_blocking=self.pinned)
-        with self.amp(enabled=self.fp16): f = self.model(x)
-        return l2_normalize(f.float().cpu().numpy())
+    def embed_batch_np(self, batch_np) -> np.ndarray:
+        # batch_np: list of [1,3,H,W] np.float32
+        X = np.concatenate(batch_np, 0)            # [N,3,H,W]
+        f = self._run(X)                            # [N,D]
+        return l2_normalize(f).astype(np.float32)   # [N,D]
 
 # ========= ROI 유틸: 중심기준 세터 =========
 def set_center_roi(px_wh, offset_xy):
@@ -313,11 +197,9 @@ def set_center_roi(px_wh, offset_xy):
 
 # ========= Embedder factory =========
 def build_embedder_from_flags():
-    return TorchTinyMNetEmbedder(out_dim=EMBED_DIM, width=WIDTH_SCALE, size=INPUT_SIZE,
-                                 fp16=USE_FP16, weights_path=(PRETRAINED_PATH if PRETRAINED else None),
-                                 channels_last=CHANNELS_LAST, cudnn_benchmark=CUDNN_BENCHMARK,
-                                 warmup_steps=WARMUP_STEPS, use_depthwise=(not NO_DEPTHWISE),
-                                 use_bn=(not NO_BN), pinned=USE_PINNED)
+    if not PRETRAINED:
+        raise RuntimeError("--pretrained=1 과 --pretrained_path=<onnx> 를 지정하세요.")
+    return OnnxEmbedder(PRETRAINED_PATH, size=INPUT_SIZE, out_dim=EMBED_DIM)
 
 # ========= 카메라 =========
 def build_gst_pipeline(dev, w=None, h=None, fps=None, pixfmt="YUYV"):
@@ -404,10 +286,11 @@ def roi_snapshot_from_cap(cap, out_path="ROI_snapshot.jpg", annotate=True):
     return True
 
 def diag_env():
-    print("[env]", "torch:", torch.__version__, "cuda:", torch.cuda.is_available())
-    if torch.cuda.is_available(): print("[env]", "device:", torch.cuda.get_device_name(0))
-    print("[env]", "cudnn.enabled:", torch.backends.cudnn.enabled)
-    print("[env]", "cudnn.benchmark:", torch.backends.cudnn.benchmark)
+    print("[env]", "onnxruntime:", ort.__version__)
+    try:
+        print("[env]", "providers:", ort.get_available_providers())
+    except Exception:
+        pass
     print("[env]", "cv2:", cv2.__version__)
     print("[env]", "ROI_XYWH:", ROI, "ROI_CENTER(px/off):", ROI_PX, ROI_OFF)
 
@@ -435,7 +318,6 @@ def e2e_warmup(emb, cap, n=30, pregrab=5):
         if not ok: break
         _ = emb.embed_bgr(bgr)
         cnt += 1
-    torch.cuda.synchronize()
     dt = (time.perf_counter()-t0)/max(1,cnt)
     print(f"[warmup] e2e frames={cnt}, avg_ms={dt*1000:.1f}", flush=True)
 
@@ -457,7 +339,6 @@ def manual_demo_headless(emb, cap, print_k=8, save_npy=None, save_img=None):
                 print("프레임 획득 실패", file=sys.stderr); continue
             t0 = time.perf_counter()
             v = emb.embed_bgr(bgr)
-            torch.cuda.synchronize()
             ms = (time.perf_counter()-t0)*1000.0
             print_embed(v, ms=ms, print_k=print_k)
             if save_npy:
@@ -475,7 +356,6 @@ def oneshot(emb, cap, print_k=8, save_npy=None, save_img=None):
         print("프레임 획득 실패", file=sys.stderr); return
     t0 = time.perf_counter()
     v = emb.embed_bgr(bgr)
-    torch.cuda.synchronize()
     ms = (time.perf_counter()-t0)*1000.0
     print_embed(v, ms=ms, print_k=print_k)
     if save_npy:
@@ -515,22 +395,22 @@ def main():
     ap.add_argument("--time_log", action="store_true")
     ap.add_argument("--no_time_log", action="store_true")
     ap.add_argument("--profile", action="store_true")
-    ap.add_argument("--cudnn_benchmark", action="store_true")
-    ap.add_argument("--no_cudnn", action="store_true", help="cuDNN 비활성화")
+    ap.add_argument("--cudnn_benchmark", action="store_true")  # ignored
+    ap.add_argument("--no_cudnn", action="store_true", help="(무시) PyTorch 전용")
     ap.add_argument("--warmup", type=int, default=WARMUP_STEPS)
     # 모델/전역
     ap.add_argument("--pretrained", type=int, default=int(PRETRAINED))
-    ap.add_argument("--pretrained_mode", type=str, default=PRETRAINED_MODE)
+    ap.add_argument("--pretrained_mode", type=str, default=PRETRAINED_MODE)  # ignored
     ap.add_argument("--pretrained_path", type=str, default=PRETRAINED_PATH)
     ap.add_argument("--size", type=int, default=INPUT_SIZE)
     ap.add_argument("--out_dim", type=int, default=EMBED_DIM)
-    ap.add_argument("--width", type=float, default=WIDTH_SCALE)
-    ap.add_argument("--no_fp16", action="store_true")
-    ap.add_argument("--channels_last", action="store_true")
+    ap.add_argument("--width", type=float, default=WIDTH_SCALE)  # ignored
+    ap.add_argument("--no_fp16", action="store_true")            # ignored
+    ap.add_argument("--channels_last", action="store_true")      # ignored
     ap.add_argument("--frame_skip", type=int, default=FRAME_SKIP_N)
-    ap.add_argument("--no_depthwise", action="store_true", help="depthwise conv 비활성화")
-    ap.add_argument("--no_bn", action="store_true", help="BatchNorm 제거")
-    ap.add_argument("--pinned", action="store_true", help="CPU pinned 메모리 사용")
+    ap.add_argument("--no_depthwise", action="store_true")       # ignored
+    ap.add_argument("--no_bn", action="store_true")              # ignored
+    ap.add_argument("--pinned", action="store_true")             # ignored
     # 입출력 동작
     ap.add_argument("--images", nargs="+")
     ap.add_argument("--outdir", type=str, default="emb_out")
@@ -575,11 +455,16 @@ def main():
     PRETRAINED_MODE = args.pretrained_mode
     PRETRAINED_PATH = args.pretrained_path
     INPUT_SIZE = int(args.size); EMBED_DIM = int(args.out_dim)
-    WIDTH_SCALE = float(args.width); USE_FP16 = not args.no_fp16
+    WIDTH_SCALE = float(args.width)
+    USE_FP16 = not args.no_fp16
     CHANNELS_LAST = bool(args.channels_last); FRAME_SKIP_N = max(1, int(args.frame_skip))
     NO_DEPTHWISE = bool(args.no_depthwise)
     NO_BN = bool(args.no_bn)
     USE_PINNED = bool(args.pinned)
+
+    # 무시 옵션 경고
+    if args.no_cudnn or args.channels_last or args.no_fp16 or args.no_depthwise or args.no_bn or args.pinned:
+        vlog("[warn] 일부 PyTorch 전용 옵션은 ONNXRuntime 경로에서 무시됩니다.")
 
     # ROI 파싱
     if args.roi_px is not None and args.roi_off is not None:
@@ -588,14 +473,6 @@ def main():
         ROI = tuple(map(int, args.roi))
         ROI_PX = None; ROI_OFF = None
         vlog(f"set ROI_XYWH={ROI}")
-
-    # cuDNN on/off
-    if args.no_cudnn:
-        torch.backends.cudnn.enabled = False
-        vlog("cuDNN disabled")
-    else:
-        torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = CUDNN_BENCHMARK
 
     if args.env_check: diag_env()
 

@@ -1,4 +1,4 @@
-# main.py (refactored with core.lite)
+# main.py (refactored with core.lite, CUDA warmup removed)
 # - YAML/JSON 설정 로딩
 # - depth/img2emb/datamatrix에 설정값 주입
 # - SQLite 로깅(모든 샘플 기록)
@@ -34,7 +34,7 @@ from core.config import load_config, get_settings, apply_depth_overrides
 from core.lite import DM, Emb, Models, Storage
 from core.utils import (
     ts_wall, t_now, ms, stdin_readline_nonblock,
-    maybe_run_jetson_perf, warmup_opencv_kernels, warmup_torch_cuda,
+    maybe_run_jetson_perf, warmup_opencv_kernels,
     l2_normalize, same_device
 )
 
@@ -58,13 +58,14 @@ def run_training_now(config_path: Optional[Path], force_type: Optional[str]):
 def main():
     t_all = time.time()
     print("[init] start")
+
     # 설정
     CFG, CONFIG_PATH = load_config()
     S = get_settings(CFG)
 
+    # 경량 웜업 (CUDA 불필요)
     maybe_run_jetson_perf()
     warmup_opencv_kernels()
-    warmup_torch_cuda()
 
     # depth 파라미터 오버라이드
     apply_depth_overrides(depthmod, S)

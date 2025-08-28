@@ -1,104 +1,63 @@
-# core/utils.py  (Python 3.6 compatible)
-from __future__ import print_function
-import os
-import sys
-import time
-import select
-import subprocess
+# core/utils.py
+import os, sys, time, select
 import numpy as np
-
-try:
-    import torch
-except Exception:
-    torch = None
-
+import cv2
 
 def ts_wall():
-    """로컬시간 HH:MM:SS 문자열."""
-    return time.strftime("%H:%M:%S", time.localtime())
-
+    return time.strftime("%H:%M:%S.%f", time.localtime())[:-3]
 
 def t_now():
-    """고해상도 단조 증가 시간(초)."""
-    try:
-        return time.perf_counter()
-    except AttributeError:
-        return time.time()
-
+    return time.perf_counter()
 
 def ms(dt):
-    """초 → 'xx.xx ms' 문자열."""
-    try:
-        return "{:.2f} ms".format(float(dt) * 1000.0)
-    except Exception:
-        return "n/a"
+    return f"{dt*1000:.2f} ms"
 
-
-def stdin_readline_nonblock(timeout=0.05):
-    """블로킹하지 않고 한 줄 읽기. 입력 없으면 None."""
-    try:
-        rlist, _, _ = select.select([sys.stdin], [], [], float(timeout))
-        if rlist:
-            line = sys.stdin.readline()
-            # EOF면 빈 문자열이 들어옴
-            return line if line != "" else None
-        return None
-    except Exception:
-        return None
-
+def stdin_readline_nonblock(timeout_sec=0.05):
+    r,_,_ = select.select([sys.stdin], [], [], timeout_sec)
+    if r: return sys.stdin.readline().strip()
+    return None
 
 def maybe_run_jetson_perf():
-    """Jetson이면 성능고정 도구를 best-effort로 호출 (없으면 무시)."""
-    try:
-        if os.path.exists("/usr/bin/jetson_clocks"):
-            subprocess.Popen(
-                ["/usr/bin/jetson_clocks", "--store"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-    except Exception:
-        pass
-
+    for cmd in ["sudo nvpmodel -m 0", "sudo jetson_clocks"]:
+        os.system(cmd + " >/dev/null 2>&1")
 
 def warmup_opencv_kernels():
-    """OpenCV 커널 간단 워밍업(있으면)."""
-    try:
-        import cv2
-        img = np.zeros((64, 64, 3), np.uint8)
-        _ = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _ = cv2.GaussianBlur(img, (3, 3), 0)
-    except Exception:
-        pass
-
+    print("[warmup] OpenCV start")
+    dummy = (np.random.rand(256, 256).astype(np.float32) * 255).astype(np.uint8)
+    k = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    _ = cv2.morphologyEx(dummy, cv2.MORPH_OPEN, k, iterations=1)
+    _ = cv2.Canny(dummy, 40, 120)
+    print("[warmup] OpenCV done")
 
 def warmup_torch_cuda():
-    """CUDA 컨텍스트 초기화(있으면)."""
     try:
-        if (torch is not None) and torch.cuda.is_available():
-            x = torch.zeros(1, device="cuda")
-            _ = (x + 1.0).sum().item()
-            torch.cuda.synchronize()
-    except Exception:
-        pass
-
+        import torch
+        dev = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[warmup] Torch start (device={dev})")
+        x = torch.randn(1, 3, 64, 64, device=dev)
+        m = torch.nn.Sequential(
+            torch.nn.Conv2d(3, 8, 3, padding=1),
+            torch.nn.ReLU(inplace=True),
+            torch.nn.AdaptiveAvgPool2d((1,1)),
+            torch.nn.Flatten(),
+            torch.nn.Linear(8, 16)
+        ).to(dev).eval()
+        with torch.inference_mode():
+            for _ in range(2):
+                _ = m(x)
+                if dev == "cuda": torch.cuda.synchronize()
+        print("[warmup] Torch done")
+    except Exception as e:
+        print(f"[warmup] Torch error: {e}")
 
 def l2_normalize(x, eps=1e-8):
-    """L2 정규화."""
     x = np.asarray(x, dtype=np.float32)
-    n = float(np.linalg.norm(x))
-    if not np.isfinite(n) or n < eps:
-        return x
-    return (x / (n + eps)).astype(np.float32)
-
+    n = np.linalg.norm(x)
+    return x / (n + eps) if n > 0 else x
 
 def same_device(a, b):
-    """
-    카메라 디바이스 동일성 비교.
-    - 정수 2 ↔ '/dev/video2' 같은 케이스를 동일 취급.
-    """
-    def _norm(x):
-        if isinstance(x, int):
-            return "/dev/video{}".format(x)
-        if isinstance(x, str):
-            return x
-        return str(x)
-    return _norm(a) == _norm(b)
+    def norm(x):
+        if isinstance(x, int): return f"/dev/video{x}"
+        if isinstance(x, str) and x.isdigit(): return f"/dev/video{int(x)}"
+        return x
+    return norm(a) == norm(b)
