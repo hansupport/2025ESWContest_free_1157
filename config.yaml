@@ -4,25 +4,33 @@ embedding:
   width: 848
   height: 480
   fps: 6
+
+  # TinyMobileNet runtime spec (must match pretrain)
   input_size: 128
   out_dim: 128
   width_scale: 0.35
-  fp16: false
-  use_depthwise: false
-  use_bn: false
+  fp16: true            # Jetson Nano에서 권장 (가능하면)
+  use_depthwise: true   # 프리트레인과 동일하게
+  use_bn: true          # 프리트레인과 동일하게
   pinned: false
-  roi_px: [540, 540]        # img2emb 전용 ROI (w,h) — RGB 메인 ROI
-  roi_offset: [103, -260]   # (dx,dy)
-  weights_path: null
-  e2e_warmup_frames: 60
-  e2e_pregrab: 8
+
+  # img2emb 전용 ROI (center-based, w,h / dx,dy)
+  roi_px: [530, 530]
+  roi_offset: [90, -130]
+
+  # 사전학습 가중치 경로(런타임에 로드)
+  weights_path: "model/weights/tinymnet_emb_128d_w035.pth"
+
+  # E2E warmup
+  e2e_warmup_frames: 12
+  e2e_pregrab: 2
 
 depth:
   width: 1280
   height: 720
   fps: 6
-  roi_px: [260, 260]        # Depth 메인 ROI
-  roi_offset: [50, -110]    # (dx,dy)
+  roi_px: [250, 260]
+  roi_offset: [15, -80]
   DECIM: 1
   PLANE_TAU: 0.004
   H_MIN_BASE: 0.003
@@ -38,22 +46,21 @@ datamatrix:
   camera: 2
   prefer_res: [1920, 1080]
   prefer_fps: 6
-  decode_interval: 0.20     # 기본 주기
+  decode_interval: 0.20
   log_every_decode: 0
   max_backoff: 1.0
-  # 다중 ROI 목록(name, size[w,h], offset[dx,dy], hflip)
   rois:
     - name: ROI_LEFT_MIRROR
-      size: [240, 460]
-      offset: [-380, -170]
+      size: [390, 500]
+      offset: [-450, -140]
       hflip: true
     - name: ROI_RIGHT_MIRROR
-      size: [270, 440]
-      offset: [630, -170]
+      size: [390, 490]
+      offset: [660, -140]
       hflip: true
     - name: ROI_MAIN
-      size: [540, 540]
-      offset: [103, -260]
+      size: [530, 530]
+      offset: [90, -130]
       hflip: false
 
 quality:
@@ -63,7 +70,9 @@ storage:
   sqlite_path: "pack.db"
 
 model:
-  type: "centroid"          # "centroid" | "lgbm"
+  # 사용 우선순위: "lgbm" | "centroid"
+  # (LGBM 모델 파일이 있을 경우 "lgbm" 권장)
+  type: "lgbm"
   centroids_path: "centroids.npz"
   lgbm_path: "lgbm.pkl"
   topk: 3
@@ -82,3 +91,7 @@ lgbm:
 training:
   min_count: 2
   min_q: 0.0
+
+arduino:
+  port: "/dev/ttyACM0"
+  baudrate: 9600

@@ -1,4 +1,4 @@
-# datamatrix.py 찐찐찐최종
+# datamatrix.py
 # 다중 ROI + 좌우반전 + 전처리·멀티트라이 강화(시간예산) + 간단 디워프 + 1초 하트비트 고정
 # ROI/해상도 불변
 
@@ -6,21 +6,24 @@ import time
 import sys
 import threading
 import queue
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, Tuple, List, Dict, Any, Union
 import numpy as np
 import cv2 as cv
-
 
 TICK = 0.20
 LOG_EVERY_DECODE = 1
 MAX_BACKOFF = 1.0
-DEFAULT_CAMERA = "auto"
+# AUTO 미사용. 기본 카메라를 2번으로 고정.
+DEFAULT_CAMERA: Union[int,str] = 2
 
-# === ROI/해상도 유지 ===
-DEFAULT_ROIS = [
-    dict(name="ROI_LEFT_MIRROR",  size=[240, 460], offset=[-380, -170], hflip=True),
-    dict(name="ROI_RIGHT_MIRROR", size=[270, 440], offset=[ 630, -170], hflip=True),
-    dict(name="ROI_MAIN",         size=[540, 540], offset=[ 103, -260], hflip=False),
+# ===== RGB 전용 기본 ROI (요청값 반영) =====
+# - 메인: 530x530, dx=+100, dy=-180
+# - 좌 미러: 400x550, dx=-470, dy=-200, 좌우반전
+# - 우 미러: 390x550, dx=+680, dy=-190, 좌우반전
+DEFAULT_ROIS: List[Dict[str, Any]] = [
+    {"name": "RGB_MAIN",   "size": [530, 530], "offset": [ +90, -130], "hflip": False},
+    {"name": "RGB_L_MIRR", "size": [390, 500], "offset": [ -450, -140], "hflip": True },
+    {"name": "RGB_R_MIRR", "size": [390, 490], "offset": [ +660, -140], "hflip": True },
 ]
 
 def log(msg: str):
@@ -59,43 +62,51 @@ _dm_decode = load_dmtx_decode()
 
 def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
     t_all0 = time.perf_counter()
-    if camera in (None, "auto"):
-        try:
-            import pyrealsense2 as rs
-            pipeline = rs.pipeline()
-            config = rs.config()
-            tried = []
-            for w, h, fps in [(1920,1080,6), (1920,1080,15)]:
-                t0 = time.perf_counter()
-                try:
-                    config.disable_all_streams()
-                    config.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
-                    profile = pipeline.start(config)
-                    dev = profile.get_device()
-                    color_sensor = dev.first_color_sensor()
-                    try: color_sensor.set_option(rs.option.frames_queue_size, 2)
-                    except Exception: pass
-                    log(f"RealSense start {w}x{h}@{fps} in {(time.perf_counter()-t0)*1000:.2f} ms")
-                    log(f"Camera total open time {(time.perf_counter()-t_all0)*1000:.2f} ms")
-                    return ("realsense", (pipeline, rs))
-                except Exception as e:
-                    tried.append(f"{w}x{h}@{fps} 실패: {e}")
-                    try: pipeline.stop()
-                    except Exception: pass
-                    pipeline = rs.pipeline(); config = rs.config()
-            log("[WARN] RealSense 설정 실패: " + " | ".join(tried))
-        except Exception as e:
-            log(f"[WARN] RealSense 실패: {e}")
-    # webcam fallback
+
+    # AUTO 경로를 사용하지 않으므로 바로 V4L2로 진입
     cam_id = 0 if camera in (None, "auto") else camera
     cap = cv.VideoCapture(cam_id, cv.CAP_V4L2)
     cap.set(cv.CAP_PROP_FRAME_WIDTH,  int(prefer_res[0]))
     cap.set(cv.CAP_PROP_FRAME_HEIGHT, int(prefer_res[1]))
     cap.set(cv.CAP_PROP_FPS,          int(prefer_fps))
+    # 내부 버퍼를 얕게 유지(지연 최소화)
+    try:
+        cap.set(cv.CAP_PROP_BUFFERSIZE, 2)
+    except Exception:
+        pass
     ok, _ = cap.read()
     if ok:
         log(f"Webcam open {prefer_res[0]}x{prefer_res[1]}@{prefer_fps} in {(time.perf_counter()-t_all0)*1000:.2f} ms")
         return ("webcam", cap)
+
+    # 혹시 실패 시 마지막 폴백으로 RealSense 시도(명시적으로 쓰진 않지만 살려둠)
+    try:
+        import pyrealsense2 as rs
+        pipeline = rs.pipeline()
+        config = rs.config()
+        tried = []
+        for w, h, fps in [(int(prefer_res[0]), int(prefer_res[1]), int(prefer_fps)), (1920,1080,6), (1280,720,6)]:
+            t0 = time.perf_counter()
+            try:
+                config.disable_all_streams()
+                config.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
+                profile = pipeline.start(config)
+                dev = profile.get_device()
+                color_sensor = dev.first_color_sensor()
+                try: color_sensor.set_option(rs.option.frames_queue_size, 2)
+                except Exception: pass
+                log(f"RealSense start {w}x{h}@{fps} in {(time.perf_counter()-t0)*1000:.2f} ms")
+                log(f"Camera total open time {(time.perf_counter()-t_all0)*1000:.2f} ms")
+                return ("realsense", (pipeline, rs))
+            except Exception as e:
+                tried.append(f"{w}x{h}@{fps} 실패: {e}")
+                try: pipeline.stop()
+                except Exception: pass
+                pipeline = rs.pipeline(); config = rs.config()
+        log("[WARN] RealSense 설정 실패: " + " | ".join(tried))
+    except Exception as e:
+        log(f"[WARN] RealSense 실패: {e}")
+
     log("[ERR] 카메라 열기 실패"); sys.exit(1)
 
 def read_frame_nonblocking(cam):
@@ -170,7 +181,6 @@ def _try_dewarp(gray):
     if best is None or best_area < 600:
         return None
     pts = best.reshape(4,2).astype(np.float32)
-    # 정렬
     s = pts.sum(axis=1); diff = np.diff(pts, axis=1).ravel()
     rect = np.array([pts[np.argmin(s)], pts[np.argmin(diff)],
                      pts[np.argmax(s)], pts[np.argmax(diff)]], dtype=np.float32)
@@ -266,6 +276,40 @@ def decode_payloads_robust(gray, max_count=4, time_budget_ms=120):
                 except Exception: out.append(str(r.data))
             if out: return out
 
+    return []
+
+def decode_payloads_fast4(gray, max_count=4, time_budget_ms=80):
+    """
+    가장 빠른 경로만 수행:
+      - 전처리/업샘플/CLAHE/이진화/디워프 전부 없음
+      - 0°, 90°, 180°, 270° 네 방향만 시도
+      - 남은 예산 내에서 pylibdmtx timeout 전달(가능한 버전일 때)
+    """
+    t0 = time.perf_counter()
+    rotations = [
+        gray,
+        cv.rotate(gray, cv.ROTATE_90_CLOCKWISE),
+        cv.rotate(gray, cv.ROTATE_180),
+        cv.rotate(gray, cv.ROTATE_90_COUNTERCLOCKWISE),
+    ]
+    for img in rotations:
+        left = time_budget_ms - (time.perf_counter() - t0) * 1000.0
+        if left <= 5:
+            break
+        try:
+            res = _dm_decode(img, max_count=max_count, timeout=int(min(80, max(5, left))))
+        except TypeError:
+            # 구버전 pylibdmtx는 timeout 인자를 지원 안 할 수 있음
+            res = _dm_decode(img, max_count=max_count)
+        if res:
+            out = []
+            for r in res:
+                try:
+                    out.append(r.data.decode("utf-8", errors="replace").strip())
+                except Exception:
+                    out.append(str(r.data))
+            if out:
+                return out
     return []
 
 class DMatrixWatcher:
