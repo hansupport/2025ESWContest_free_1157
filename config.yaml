@@ -46,6 +46,7 @@ datamatrix:
   camera: 2
   prefer_res: [1920, 1080]
   prefer_fps: 6
+  scan_timeout_s: 2.0
   decode_interval: 0.20
   log_every_decode: 0
   max_backoff: 1.0
