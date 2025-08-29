@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>포장 계산기</title>
+  <meta name="viewport" content="width=1024, height=600, initial-scale=1, user-scalable=no">
+  <link rel="stylesheet" href="/ui.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="top">
+        <div class="title">포장 계산기</div>
+        <div class="hint">D 키로 측정, L/C 학습, P 일시정지 토글</div>
+      </div>
+
+      <!-- 화면 상단 중앙 상태 램프 -->
+      <div class="statusbar">
+        <div class="lamps">
+          <div id="lamp_analyzing" class="lamp analyzing"><div class="dot"></div><span>분석중</span></div>
+          <div id="lamp_done" class="lamp done"><div class="dot"></div><span>분석 완료</span></div>
+          <div id="lamp_error" class="lamp error"><div class="dot"></div><span>오류발생</span></div>
+          <div id="lamp_paused" class="lamp paused"><div class="dot"></div><span>일시정지</span></div>
+        </div>
+      </div>
+    </header>
+
+    <main class="maingrid">
+      <!-- 좌측: 이미지 + 기록 -->
+      <section class="leftcol">
+        <div class="card imgcard">
+          <div class="imgwrap">
+            <img id="item_img" alt="object image" />
+          </div>
+        </div>
+        <div class="card historycard">
+          <div class="label">최근 결과 (최신 4개)</div>
+          <ul id="history" class="historylist"></ul>
+        </div>
+      </section>
+
+      <!-- 우측: 종류·사이즈 + 뽁뽁이 길이 -->
+      <section class="rightcol">
+        <div class="card detailscard">
+          <div class="typebox">
+            <div class="label">물건 종류</div>
+            <div class="typeval" id="type_name">—</div>
+            <div class="sub" id="type_id">—</div>
+          </div>
+          <div class="grid">
+            <div class="card">
+              <div class="label">가로 (W)</div>
+              <div class="value" id="w">— mm</div>
+              <div class="sub" id="w_cm">— cm</div>
+            </div>
+            <div class="card">
+              <div class="label">세로 (L)</div>
+              <div class="value" id="l">— mm</div>
+              <div class="sub" id="l_cm">— cm</div>
+            </div>
+            <div class="card">
+              <div class="label">높이 (H)</div>
+              <div class="value" id="h">— mm</div>
+              <div class="sub" id="h_cm">— cm</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bubblecard">
+          <div class="label">필요 뽁뽁이 길이</div>
+          <div class="bubble_value_wrap">
+            <div class="bubble_value" id="bubble">— mm</div>
+            <div class="bubble_cm" id="bubble_cm">— cm</div>
+          </div>
+          <div class="warn" id="warn"></div>
+          <div class="sub" id="params">계산식: 2×(W+L)×층수 + overlap + slack</div>
+          <div class="prob" id="prob">p = —</div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div>업데이트: <span id="ts">—</span></div>
+      <div id="note" class="hint">층수/여유 변경: <code>/api/params?layers=2&overlap_mm=120</code></div>
+    </footer>
+  </div>
+
+  <script src="/ui.js"></script>
+</body>
+</html>
