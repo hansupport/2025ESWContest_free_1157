@@ -471,6 +471,7 @@ def main():
 
                 _set_status("analyzing", touch=False)
                 _set_prob(None, touch=False)
+                _touch_ts()
                 try:
                     # 1) DM 스캔
                     t_s0 = t_now()
