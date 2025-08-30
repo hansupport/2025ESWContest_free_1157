@@ -1,9 +1,10 @@
-# main.py  (index.html / ui.css / ui.js를 루트에서 서빙하는 버전)
+# main.py  (index.html / ui.css / ui.js를 루트에서 서빙하는 버전 + ★★★ 프레임 펌프/버스트 플러시 적용)
 # - DM 없으면 모델 라벨(16자리)로 타입/치수 파싱 → UI 즉시 반영
 # - p < 0.40 이면: 빨간 "오류발생" 램프, 경고 메시지 표시
 # - p ≥ 0.40 이면: 초록 "분석 완료" 램프, 경고 해제
 # - 상태 램프 순서는 index.html에서 변경 (여기서는 상태값만 전달)
 # - P: 일시정지 토글, D: 측정/스캔/추론, L/C: 학습 트리거
+# - ★★★ 카메라 항상 켜두는 저속-대기 펌프 + 트리거 시 버스트로 최신 프레임 확보
 
 import sys
 import time
@@ -302,6 +303,65 @@ def run_training_now(config_path: Optional[Path], force_type: Optional[str]):
     except Exception as e:
         print("[train] 실행 실패:", e)
 
+# =======================
+# ★★★ 프레임 펌프 / 버스트 플러시
+# =======================
+_RUN_PUMP = False
+_PUMP_THREAD = None
+_SCAN_BUSY = threading.Event()
+
+def _start_frame_pump(dm_handle, rois, idle_fps: float = 1.0):
+    """
+    저속-대기 펌프: 주기적으로 아주 짧게 scan을 호출해
+    드라이버 큐가 오래된 프레임으로 굳지 않게 유지.
+    """
+    global _RUN_PUMP, _PUMP_THREAD
+    if dm_handle is None:
+        print("[pump] dm_handle 없음 → 펌프 미사용")
+        return
+    if idle_fps <= 0:
+        print("[pump] idle_fps<=0 → 펌프 비활성화")
+        return
+
+    _RUN_PUMP = True
+    period = 1.0 / float(idle_fps)
+
+    def _loop():
+        print(f"[pump] start idle_fps={idle_fps:.2f} (period={period:.3f}s)")
+        while _RUN_PUMP:
+            if _SCAN_BUSY.is_set():
+                time.sleep(period)
+                continue
+            try:
+                DM.scan_fast4(dm_handle, rois, 0.005, debug=False, trace_id=None)
+            except Exception:
+                pass
+            time.sleep(period)
+        print("[pump] stopped")
+
+    _PUMP_THREAD = threading.Thread(target=_loop, daemon=True)
+    _PUMP_THREAD.start()
+
+def _stop_frame_pump():
+    global _RUN_PUMP, _PUMP_THREAD
+    _RUN_PUMP = False
+    if _PUMP_THREAD is not None:
+        try:
+            _PUMP_THREAD.join(timeout=1.0)
+        except Exception:
+            pass
+        _PUMP_THREAD = None
+
+def _burst_flush(dm_handle, rois, n=10, to_sec=0.001):
+    """
+    트리거 직전에 매우 짧은 스캔을 n회 호출해 버퍼를 신속히 새로고침.
+    """
+    try:
+        for _ in range(int(n)):
+            DM.scan_fast4(dm_handle, rois, float(to_sec), debug=False, trace_id=None)
+    except Exception:
+        pass
+
 def main():
     t_all = time.time()
     print("[init] start")
@@ -412,6 +472,11 @@ def main():
     # e2e warmup
     Emb.warmup_shared(emb, S, dm_handle, DM.lock(), S.embedding.e2e_warmup_frames, S.embedding.e2e_pregrab)
 
+    # ★★★ 프레임 펌프 시작
+    IDLE_FPS = float(os.getenv("IDLE_PUMP_FPS", "1.0"))
+    rois_for_pump = _normalize_rois(getattr(S.dm, "rois", []))
+    _start_frame_pump(dm_handle, rois_for_pump, idle_fps=IDLE_FPS)
+
     # 모델 & 스무더
     engine = Models.InferenceEngine(S)
     smoother = Models.ProbSmoother(
@@ -469,10 +534,18 @@ def main():
                 t_press = t_now()
                 print(f"[D#{tid}][{ts_wall()}] key_down → scan_call")
 
+                # ★★★ 분석중 램프 즉시 반영
                 _set_status("analyzing", touch=False)
                 _set_prob(None, touch=False)
                 _touch_ts()
+
+                # ★★★ 펌프 일시 정지 + 버스트 플러시
+                _SCAN_BUSY.set()
                 try:
+                    BURST_N = int(os.getenv("BURST_FLUSH_N", "10"))
+                    BURST_TO_MS = int(os.getenv("BURST_FLUSH_TO_MS", "1"))
+                    _burst_flush(dm_handle, rois_for_pump, n=BURST_N, to_sec=BURST_TO_MS/1000.0)
+
                     # 1) DM 스캔
                     t_s0 = t_now()
                     payload = datamatrix_scan_persistent(None, debug=False, trace_id=tid)
@@ -499,7 +572,8 @@ def main():
                             print("[manual] 측정 실패")
                             continue
                         t_emb0 = t_now()
-                        vec = Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=3)
+                        # ★★★ 최신 프레임 확보를 위해 pregrab 크게
+                        vec = Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=12)
                         t_emb1 = t_now()
                         print(f"[D#{tid}][{ts_wall()}] embed_one_frame elapsed={ms(t_emb1 - t_emb0)}")
                         if vec is None:
@@ -522,9 +596,9 @@ def main():
                     if feat is None:
                         print("[manual] 측정 실패"); _set_status("error"); continue
 
-                    # 3) 임베딩
+                    # 3) 임베딩 (★ 최신 프레임: pregrab 크게)
                     t_emb0 = t_now()
-                    vec = Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=3)
+                    vec = Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=12)
                     t_emb1 = t_now()
                     print(f"[D#{tid}][{ts_wall()}] embed_one_frame elapsed={ms(t_emb1 - t_emb0)}")
                     if vec is None:
@@ -602,7 +676,6 @@ def main():
                             lab, avgp = decided
                             print(f"[decision] smoothed: {lab} p={avgp:.2f}")
 
-                    # 주의: 여기서는 상태를 다시 덮어쓰지 않음(위에서 p 기준으로 이미 결정)
                     continue
 
                 except Exception as e:
@@ -611,10 +684,15 @@ def main():
                     _set_warn("오류가 발생했습니다.")
                     _set_prob(None)
                     continue
+                finally:
+                    # ★★★ 트리거 처리 종료 → 펌프 재개 허용
+                    _SCAN_BUSY.clear()
 
     except KeyboardInterrupt:
         print("[exit] keyboard interrupt")
     finally:
+        # ★★★ 펌프 정지
+        _stop_frame_pump()
         try:
             conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             conn.execute("PRAGMA optimize")

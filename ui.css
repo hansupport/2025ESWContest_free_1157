@@ -111,3 +111,7 @@ footer { padding:8px 14px; font-size:13px; color:#94a3b8; display:flex; justify-
   vertical-align: baseline;
 }
 .num { /* 필요시 개별 커스터마이즈용 (지금은 기본값 유지) */ }
+/* 더 작은 보조 문구 + 고정폭 폰트 + 줄바꿈 보존 */
+.sub.small { font-size: 12px; line-height: 1.35; }
+.sub.mono  { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+#params, #params2 { white-space: pre-line; } /* \n 을 줄바꿈으로 표시 */
