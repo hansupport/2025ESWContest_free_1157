@@ -1,7 +1,6 @@
 # datamatrix.py
 # 다중 ROI + 좌우반전 + 전처리·멀티트라이 강화(시간예산) + 간단 디워프 + 1초 하트비트 고정
 # ROI/해상도 불변
-
 import time
 import sys
 import threading
@@ -61,25 +60,69 @@ def load_dmtx_decode():
 _dm_decode = load_dmtx_decode()
 
 def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
+    """
+    Jetson/OpenCV(UVC)에서 '항상 최신 프레임'을 보장하기 위한 오픈 정책:
+      1) 가능하면 GStreamer appsink로 오픈 (drop=true, max-buffers=1, sync=false)
+      2) 실패 시 V4L2 폴백 + CAP_PROP_BUFFERSIZE=1 시도
+      3) 최종 폴백 RealSense (frames_queue_size=1)
+    """
     t_all0 = time.perf_counter()
-
-    # AUTO 경로를 사용하지 않으므로 바로 V4L2로 진입
     cam_id = 0 if camera in (None, "auto") else camera
+
+    # 1) GStreamer appsink 우선
+    try:
+        if "GStreamer: YES" in cv.getBuildInformation():
+            device = cam_id if (isinstance(cam_id, str) and cam_id.startswith("/dev/video")) else f"/dev/video{int(cam_id)}"
+            w, h = int(prefer_res[0]), int(prefer_res[1])
+            fps = int(prefer_fps)
+
+            gst_candidates = [
+                # MJPG 경로
+                (
+                    f"v4l2src device={device} io-mode=2 ! "
+                    f"image/jpeg,framerate={fps}/1 ! jpegdec ! "
+                    f"videoscale ! video/x-raw,width={w},height={h} ! "
+                    f"appsink drop=true max-buffers=1 sync=false"
+                ),
+                # YUY2 경로
+                (
+                    f"v4l2src device={device} io-mode=2 ! "
+                    f"video/x-raw,format=YUY2,width={w},height={h},framerate={fps}/1 ! "
+                    f"videoconvert ! "
+                    f"appsink drop=true max-buffers=1 sync=false"
+                ),
+            ]
+            for gst in gst_candidates:
+                cap = cv.VideoCapture(gst, cv.CAP_GSTREAMER)
+                if cap.isOpened():
+                    ok, _ = cap.read()
+                    if ok:
+                        log(f"GStreamer appsink open {w}x{h}@{fps} in {(time.perf_counter()-t_all0)*1000:.2f} ms")
+                        return ("webcam", cap)
+            log("[WARN] GStreamer appsink 실패 → V4L2 폴백")
+    except Exception as e:
+        log(f"[WARN] GStreamer 경로 예외: {e}")
+
+    # 2) V4L2 폴백
     cap = cv.VideoCapture(cam_id, cv.CAP_V4L2)
     cap.set(cv.CAP_PROP_FRAME_WIDTH,  int(prefer_res[0]))
     cap.set(cv.CAP_PROP_FRAME_HEIGHT, int(prefer_res[1]))
     cap.set(cv.CAP_PROP_FPS,          int(prefer_fps))
-    # 내부 버퍼를 얕게 유지(지연 최소화)
     try:
-        cap.set(cv.CAP_PROP_BUFFERSIZE, 2)
+        cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))  # RealSense UVC는 MJPG일 때가 많음
     except Exception:
         pass
+    try:
+        cap.set(cv.CAP_PROP_BUFFERSIZE, 1)  # ★ 큐를 1장으로
+    except Exception:
+        pass
+
     ok, _ = cap.read()
     if ok:
-        log(f"Webcam open {prefer_res[0]}x{prefer_res[1]}@{prefer_fps} in {(time.perf_counter()-t_all0)*1000:.2f} ms")
+        log(f"V4L2 open {prefer_res[0]}x{prefer_res[1]}@{prefer_fps} in {(time.perf_counter()-t_all0)*1000:.2f} ms")
         return ("webcam", cap)
 
-    # 혹시 실패 시 마지막 폴백으로 RealSense 시도(명시적으로 쓰진 않지만 살려둠)
+    # 3) 최종 폴백: RealSense 컬러
     try:
         import pyrealsense2 as rs
         pipeline = rs.pipeline()
@@ -93,7 +136,7 @@ def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
                 profile = pipeline.start(config)
                 dev = profile.get_device()
                 color_sensor = dev.first_color_sensor()
-                try: color_sensor.set_option(rs.option.frames_queue_size, 2)
+                try: color_sensor.set_option(rs.option.frames_queue_size, 1)  # ★ 큐 최소화
                 except Exception: pass
                 log(f"RealSense start {w}x{h}@{fps} in {(time.perf_counter()-t0)*1000:.2f} ms")
                 log(f"Camera total open time {(time.perf_counter()-t_all0)*1000:.2f} ms")
@@ -112,6 +155,12 @@ def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
 def read_frame_nonblocking(cam):
     if cam[0] == "realsense":
         pipeline, rs = cam[1]
+        # ★ 드레인: 묵은 프레임 밀어내기
+        for _ in range(3):
+            try:
+                _ = pipeline.poll_for_frames()
+            except Exception:
+                break
         frames = pipeline.poll_for_frames()
         if not frames:
             try:
@@ -123,6 +172,12 @@ def read_frame_nonblocking(cam):
         return np.asanyarray(c.get_data())
     else:
         cap = cam[1]
+        # ★★★ 핵심: 최신 프레임 확보용 드레인 (4~8회 권장)
+        try:
+            for _ in range(6):
+                cap.grab()   # 읽지 않고 큐에서 버림
+        except Exception:
+            pass
         ret, frame = cap.read()
         if not ret: return None
         return frame
@@ -195,7 +250,6 @@ def _try_dewarp(gray):
 # ── 제한시간(프레임/ROI 별) 내에서 빠른→정교 순으로 시도 ──
 def decode_payloads_robust(gray, max_count=4, time_budget_ms=120):
     t_start = time.perf_counter()
-
     def left_ms():
         return max(0.0, time_budget_ms - (time.perf_counter()-t_start)*1000.0)
 
