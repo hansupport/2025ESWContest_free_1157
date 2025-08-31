@@ -1,14 +1,14 @@
-# train.py (Py3.6 호환 / sklearn 미사용 / 진행률 % 출력 / 피클 없이 저장되는 centroid)
+# train.py (Py3.6 호환 / sklearn 미사용 / 진행률 % 출력 / 피클 없이 저장되는 centroid + LGBM NPZ 백업)
 # - YAML/JSON 설정 로딩(--config)
 # - SQLite(sample_log)에서 has_label=1 로드
-# - 15 스칼라 + emb → L2 정규화 벡터  ← (logsV 중복 포함되던 문제 수정)
+# - 15 스칼라 + emb → L2 정규화 벡터  ← DB의 실제 임베딩 차원 자동 감지(128/384 혼재 안전)
 # - model.type: "centroid" or "lgbm"
-# - LGBM: lightgbm.train + early_stopping + 진행률(%) 콜백
+# - LGBM: (옵션) 하이퍼파라미터 그리드 서치 + lightgbm.train + early_stopping + 진행률(%) 콜백
 # - 저장:
 #     * centroid: NPZ (labels를 'U128' 문자열로 변환)  => allow_pickle=False OK
-#     * lgbm: joblib(pkl) + 추가로 피클-프리 NPZ 백업도 함께 저장
+#     * lgbm: joblib(pkl) + 추가로 피클-프리 NPZ 백업도 함께 저장 (model_str + meta + classes + input_dim)
 
-import sys, json, argparse, sqlite3, time
+import sys, json, argparse, sqlite3, time, itertools
 from pathlib import Path
 import numpy as np
 from typing import Optional
@@ -80,15 +80,15 @@ def stack_vectors(rows, expect_emb_dim=None):
     """
     vecs, labels = [], []
     for r in rows:
-        # 총 17개: core12(12) + logV + logsV + q + emb + product_id
         *core12, logV, logsV, q, emb_blob, pid = r
         if len(core12) != 12:
             print("[warn] unexpected core12 len:", len(core12))
-        feat15 = list(core12) + [logV, logsV, q]  # ← logsV 중복 제거 및 15개 보장
+        feat15 = list(core12) + [logV, logsV, q]
 
         emb = emb_from_blob(emb_blob)
         if expect_emb_dim is not None and emb.shape[0] != expect_emb_dim:
-            print("[warn] emb_dim mismatch: got {} expect {} → skip".format(emb.shape[0], expect_emb_dim))
+            # 자동 필터링으로 이미 걸렀지만, 방어 차원에서 한 번 더 체크
+            # print("[warn] emb_dim mismatch: got {} expect {} → skip".format(emb.shape[0], expect_emb_dim))
             continue
 
         v = np.concatenate([np.array(feat15, np.float32), emb.astype(np.float32)], axis=0)
@@ -124,7 +124,7 @@ def eval_top1_loo(X, y, C, labels, counts):
         if yi in sums: sums[yi] += xi
     correct = 0; total = 0
     for xi, yi in zip(X, y):
-        if yi not in idx_map:  # 방어
+        if yi not in idx_map:
             continue
         k = idx_map[yi]; ny = int(counts[k])
         if ny <= 1:
@@ -146,6 +146,7 @@ def save_centroids(path, C, labels, counts, dim, cfg_used):
       - meta는 JSON 문자열로 저장
       => np.load(..., allow_pickle=False)로 안전 로딩 가능
     """
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     meta = {
         "created_unix": time.time(),
@@ -206,9 +207,11 @@ def lgb_params_from_cfg(params, num_class):
         "verbosity": -1,
         "seed": int(params.get("seed", 42)),
     }
+    if "max_depth" in params and params["max_depth"] is not None:
+        p["max_depth"] = int(params["max_depth"])
     return p
 
-def eval_lgbm_cv(X, y, params, k=5, progress_period=10):
+def eval_lgbm_cv(X, y, params, k=5, progress_period=10, progress_prefix="[cv]"):
     import lightgbm as lgb
 
     classes, y_idx = encode_labels(y)
@@ -233,7 +236,7 @@ def eval_lgbm_cv(X, y, params, k=5, progress_period=10):
         dtrain = lgb.Dataset(X[tr_idx], label=y_idx[tr_idx])
         dvalid = lgb.Dataset(X[va_idx], label=y_idx[va_idx])
 
-        callbacks = [make_progress_cb(n_est_big, period=progress_period)]
+        callbacks = [make_progress_cb(n_est_big, period=progress_period, prefix=progress_prefix)]
         try:
             from lightgbm import early_stopping, log_evaluation
             callbacks = [early_stopping(50), log_evaluation(progress_period)] + callbacks
@@ -288,16 +291,114 @@ def train_lgbm_full(X, y, params, n_estimators_override=None, verbose_period=50)
     )
     return booster, classes
 
-def save_lgbm(path, booster, classes_):
+def save_lgbm(path, booster, classes_, input_dim):
     from joblib import dump
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 1) 기존 포맷(joblib)
+    # 1) joblib 포맷(모델 문자열 저장 → 버전 독립성 ↑)
     booster_str = booster.model_to_string()
     best_it = getattr(booster, "best_iteration", None)
     dump({"booster_str": booster_str, "best_iteration": best_it, "classes_": classes_}, str(path))
     print("[save] {}  classes={} (joblib)".format(path, len(classes_)))
+
+    # 2) 피클-프리 NPZ 백업 (모델 문자열 + 메타 + classes + input_dim)
+    npz_path = path.with_suffix(".npz")
+    meta = {
+        "created_unix": time.time(),
+        "best_iteration": int(best_it) if best_it is not None else None,
+        "input_dim": int(input_dim),
+        "note": "LightGBM model backup stored as text (model_str) and classes (U128)."
+    }
+    classes_u = np.array([str(x) for x in classes_], dtype="U128")
+    np.savez(
+        str(npz_path),
+        model_str=np.array([booster_str], dtype="U"),
+        classes=classes_u,
+        meta=json.dumps(meta)
+    )
+    print("[save] {}  (pickle-free backup)".format(npz_path))
+
+# ----------------- Grid Search (no sklearn) -----------------
+def cartesian_product(dict_of_lists):
+    """
+    dict -> list[dict] (모든 조합)
+    예) {"lr":[0.05,0.1], "num_leaves":[31,63]} →
+        [{"lr":0.05,"num_leaves":31}, {"lr":0.05,"num_leaves":63}, {"lr":0.1,"num_leaves":31}, {"lr":0.1,"num_leaves":63}]
+    """
+    if not dict_of_lists:
+        return [{}]
+    keys = list(dict_of_lists.keys())
+    vals = [list(dict_of_lists[k]) for k in keys]
+    combos = []
+    for tup in itertools.product(*vals):
+        d = {}
+        for i, k in enumerate(keys):
+            d[k] = tup[i]
+        combos.append(d)
+    return combos
+
+def merge_params(base_params, override_dict):
+    p = dict(base_params) if base_params else {}
+    for k, v in override_dict.items():
+        p[k] = v
+    return p
+
+def grid_search_lgbm(X, y, base_params, grid_space, k=5, progress_period=10):
+    """
+    반환: best_params(dict), best_acc(float), best_iters(list), trials(list of dict)
+      trials 항목: {"params": {...}, "acc": 0.876, "folds": k, "best_iters":[...]}
+    """
+    combos = cartesian_product(grid_space)
+    print("[grid] total combinations =", len(combos))
+
+    best_acc = -1.0
+    best_params = None
+    best_iters = []
+    trials = []
+    for gi, g in enumerate(combos):
+        params_g = merge_params(base_params, g)
+        prefix = "[cv:g{}/{}]".format(gi+1, len(combos))
+        print("[grid] try #{}/{} params={}".format(gi+1, len(combos), params_g))
+        acc, folds, iters = eval_lgbm_cv(X, y, params_g, k=k, progress_period=progress_period, progress_prefix=prefix)
+        trials.append({"params": params_g, "acc": acc, "folds": folds, "best_iters": iters})
+        if acc is not None and acc > best_acc:
+            best_acc = acc
+            best_params = params_g
+            best_iters = iters
+        print("[grid] result #{}/{} acc={}".format(gi+1, len(combos), "None" if acc is None else "{:.4f}".format(acc)))
+    return best_params, best_acc, best_iters, trials
+
+def save_grid_report(path_like, trials, chosen):
+    """
+    trials를 JSON으로 저장 (가벼운 리포트)
+    """
+    path = Path(path_like)
+    report_path = path.with_suffix(".grid.json")
+    try:
+        serializable = []
+        for t in trials:
+            row = {
+                "params": t.get("params", {}),
+                "acc": float(t["acc"]) if t["acc"] is not None else None,
+                "folds": int(t.get("folds", 0)),
+                "best_iters": [int(x) for x in (t.get("best_iters") or [])]
+            }
+            serializable.append(row)
+        with report_path.open("w", encoding="utf-8") as f:
+            json.dump({"trials": serializable, "chosen": chosen}, f, ensure_ascii=False, indent=2)
+        print("[grid] report saved:", report_path)
+    except Exception as e:
+        print("[grid] report save failed:", e)
+
+# ----------------- 유틸: DB 내 임베딩 차원 자동 감지 -----------------
+def detect_embed_dim_counts(rows):
+    counts = {}
+    for r in rows:
+        emb_blob = r[-2]  # (*core12, logV, logsV, q, emb, product_id)
+        d = np.frombuffer(emb_blob, dtype=np.float32).shape[0]
+        counts[d] = counts.get(d, 0) + 1
+    return counts
 
 # ----------------- CLI -----------------
 def main():
@@ -306,47 +407,97 @@ def main():
     ap.add_argument("--min_count", type=int, default=None, help="(centroid) 클래스 최소 샘플수(미지정시 2)")
     ap.add_argument("--min_q", type=float, default=None, help="q 하한(미지정시 0.0)")
     ap.add_argument("--type", type=str, default=None, help="모델 타입 강제: centroid|lgbm")
+    ap.add_argument("--grid", type=int, default=None, help="lgbm 그리드 서치 사용 여부(1=on, 0=off). 미지정시 config.lgbm_grid 존재 시 자동")
+    ap.add_argument("--cv_k", type=int, default=None, help="그리드/평가용 K-fold (기본 5)")
     args = ap.parse_args()
 
     cfg, used_cfg = load_config(args.config)
 
     model_cfg = cfg.get("model", {})
     model_type = (args.type or model_cfg.get("type", "centroid")).lower()
-    out_dim = int(cfg.get("embedding", {}).get("out_dim", 128))
+    # config의 out_dim과 concat3를 참고하되, 실제 DB 차원 자동 감지를 우선 사용
+    emb_cfg = cfg.get("embedding", {})
+    out_dim_cfg = int(emb_cfg.get("out_dim", 128))
+    concat3_cfg = bool(emb_cfg.get("concat3", False))
+    expect_dim_cfg = out_dim_cfg * (3 if concat3_cfg else 1)
+
     db_path = resolve_path(cfg.get("storage", {}).get("sqlite_path", "pack.db"))
     centroids_path = resolve_path(model_cfg.get("centroids_path", "centroids.npz"))
     lgbm_path = resolve_path(model_cfg.get("lgbm_path", "lgbm.pkl"))
     min_count = args.min_count if args.min_count is not None else int(cfg.get("training", {}).get("min_count", 2))
     min_q = args.min_q if args.min_q is not None else float(cfg.get("training", {}).get("min_q", 0.0))
+    cv_k = args.cv_k if args.cv_k is not None else int(cfg.get("lgbm", {}).get("cv_k", 5))
 
-    print("[cfg] type={}  db={}  emb_dim={}  min_count={}  min_q={}".format(
-        model_type, db_path, out_dim, min_count, min_q))
+    grid_space = cfg.get("lgbm_grid", None)
+    if args.grid is not None:
+        do_grid = bool(int(args.grid) == 1)
+    else:
+        do_grid = bool(grid_space) if model_type == "lgbm" else False
+
+    print("[cfg] type={}  db={}  cfg_out_dim={}  cfg_concat3={}  cfg_expect_dim={}  min_count={}  min_q={}  grid={}".format(
+        model_type, db_path, out_dim_cfg, concat3_cfg, expect_dim_cfg, min_count, min_q, do_grid))
 
     conn = open_db(db_path)
     rows = fetch_labeled(conn, min_q=min_q)
     print("[data] labeled rows={}".format(len(rows)))
 
-    X, y = stack_vectors(rows, expect_emb_dim=out_dim)
-    if X is None:
+    if not rows:
         print("[fatal] usable data not found"); return 2
+
+    # DB 실제 임베딩 차원 자동 감지
+    dim_counts = detect_embed_dim_counts(rows)
+    if not dim_counts:
+        print("[fatal] no embeddings in rows"); return 2
+    # 최빈 차원 선택
+    target_emb_dim = max(dim_counts, key=dim_counts.get)
+    print("[data] emb-dim counts in DB =", dim_counts, "| use_dim =", target_emb_dim)
+    if target_emb_dim != expect_dim_cfg:
+        print("[warn] config expect_dim={} != DB use_dim={} (자동으로 DB 기준 사용)".format(expect_dim_cfg, target_emb_dim))
+
+    # 해당 차원만 필터링하여 벡터 스택
+    rows = [r for r in rows if np.frombuffer(r[-2], dtype=np.float32).shape[0] == target_emb_dim]
+    X, y = stack_vectors(rows, expect_emb_dim=target_emb_dim)
+    if X is None:
+        print("[fatal] usable data not found after dim filtering"); return 2
     dim = X.shape[1]
     print("[data] X shape={}  classes={}".format(X.shape, len(set(y))))
 
     if model_type == "lgbm":
-        params = cfg.get("lgbm", {})
-        acc, folds, best_iters = eval_lgbm_cv(X, y, params, k=5, progress_period=10)
-        if acc is None:
-            print("[eval] not enough per-class samples for CV")
-            booster, classes_ = train_lgbm_full(X, y, params)
-            save_lgbm(lgbm_path, booster, classes_)
+        params_base = cfg.get("lgbm", {})
+        if do_grid:
+            print("[grid] start LGBM grid search")
+            best_params, best_acc, best_iters, trials = grid_search_lgbm(
+                X, y, params_base, grid_space, k=cv_k, progress_period=10
+            )
+            if best_params is None:
+                print("[grid] not enough per-class samples for CV → skip grid, train full with base params")
+                booster, classes_ = train_lgbm_full(X, y, params_base)
+                save_lgbm(lgbm_path, booster, classes_, input_dim=X.shape[1])
+                return 0
+
+            n_final = int(np.median(best_iters)) if best_iters else int(best_params.get("n_estimators", params_base.get("n_estimators", 200)))
+            print("[grid] best acc={:.2f}% | best_params={} | best_iters={} | n_final={}".format(
+                best_acc*100.0, best_params, best_iters, n_final))
+            save_grid_report(lgbm_path, trials, {"best_params": best_params, "best_acc": best_acc, "best_iters": best_iters, "n_final": n_final})
+
+            booster, classes_ = train_lgbm_full(X, y, best_params, n_estimators_override=n_final, verbose_period=50)
+            save_lgbm(lgbm_path, booster, classes_, input_dim=X.shape[1])
             return 0
 
-        n_final = int(np.median(best_iters)) if best_iters else int(params.get("n_estimators", 200))
+        # grid 미사용: 기본 CV → full train
+        acc, folds, best_iters = eval_lgbm_cv(X, y, params_base, k=cv_k, progress_period=10)
+        if acc is None:
+            print("[eval] not enough per-class samples for CV")
+            booster, classes_ = train_lgbm_full(X, y, params_base)
+            save_lgbm(lgbm_path, booster, classes_, input_dim=X.shape[1])
+            return 0
+
+        n_final = int(np.median(best_iters)) if best_iters else int(params_base.get("n_estimators", 200))
         print("[eval] LGBM {}-fold acc={:.2f}% | best_iters={} | n_final={}".format(
             folds, acc*100.0, best_iters, n_final))
 
-        booster, classes_ = train_lgbm_full(X, y, params, n_estimators_override=n_final, verbose_period=50)
-        save_lgbm(lgbm_path, booster, classes_)
+        booster, classes_ = train_lgbm_full(X, y, params_base, n_estimators_override=n_final, verbose_period=50)
+        save_lgbm(lgbm_path, booster, classes_, input_dim=X.shape[1])
         return 0
 
     # 기본: centroid

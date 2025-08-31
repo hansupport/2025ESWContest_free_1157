@@ -1,4 +1,5 @@
 # core/lite.py
+import os
 import threading, time
 from pathlib import Path
 from typing import Optional, Tuple, List
@@ -146,8 +147,15 @@ class ONNXEmbedder:
         self.roi_off = (int(roi_off[0]), int(roi_off[1])) if roi_off is not None else (0,0)
 
         sess_opt = ort.SessionOptions()
-        sess_opt.intra_op_num_threads = 1
-        sess_opt.inter_op_num_threads = 1
+        # Jetson Nano: 과도한 스레드는 오히려 느려질 수 있음 → 기본 1/1
+        sess_opt.intra_op_num_threads = int(os.getenv("ORT_INTRA_THREADS", "1"))
+        sess_opt.inter_op_num_threads = int(os.getenv("ORT_INTER_THREADS", "1"))
+        # 그래프 최적화 활성화
+        try:
+            sess_opt.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        except Exception:
+            pass
+
         self.sess = ort.InferenceSession(str(onnx_path), sess_options=sess_opt, providers=["CPUExecutionProvider"])
         self.input_name = self.sess.get_inputs()[0].name
         self.output_name = self.sess.get_outputs()[0].name
@@ -198,7 +206,15 @@ class Emb:
     @staticmethod
     def _open_camera(cam, w=None, h=None, fps=None, pixfmt="YUYV"):
         # 간단 V4L2 오픈 (필요시 GStreamer로 확장)
-        cam_id = int(cam) if isinstance(cam, str) and cam.isdigit() else cam
+        cam_id = cam
+        if isinstance(cam, str):
+            if cam.isdigit():
+                cam_id = int(cam)
+            elif cam.startswith("/dev/video"):
+                try:
+                    cam_id = int(cam.replace("/dev/video", ""))
+                except Exception:
+                    pass
         cap = cv2.VideoCapture(cam_id, cv2.CAP_V4L2)
         if w: cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(w))
         if h: cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(h))
@@ -314,29 +330,25 @@ class Emb:
                                 rois3: List[Tuple[int,int,int,int,int]],
                                 center_shrink: float, mirror_shrink: float) -> Optional[np.ndarray]:
         """
-        단일 프레임에서 3뷰 ROI 크롭 및 임베딩 후 concat.
-        rois3: [(w,h,dx,dy,hflip), ...] 길이 3 권장 (center, left, right)
+        단일 프레임에서 전달된 ROI 목록만 임베딩 후 concat.
+        rois3: [(w,h,dx,dy,hflip), ...]  ← 길이 1도 허용
         """
         if frame_bgr is None or frame_bgr.size == 0:
             return None
-        # 안전한 길이 체크
-        if not rois3 or len(rois3) < 3:
-            # 기본 ROI
-            rois3 = [
-                (540, 540, +103, -260, 0),  # center
-                (240, 460, -380, -170, 1),  # left mirror
-                (270, 440, +630, -170, 1),  # right mirror
-            ]
+        if not rois3:
+            return None  # <<<< 기본 3개 강제 제거(버그 원인). 호출자가 원하는 ROI만 처리.
+
         out_vecs = []
-        for i, (w,h,dx,dy,hf) in enumerate(rois3[:3]):
+        for i, (w,h,dx,dy,hf) in enumerate(rois3):
             shrink = center_shrink if i == 0 else mirror_shrink
             roi = Emb._crop_center_roi(frame_bgr, int(w), int(h), int(dx), int(dy), bool(hf), float(shrink))
             if roi is None or roi.size == 0:
                 continue
             v = emb.embed_bgr(roi)
-            if v is None:  # 방어
+            if v is None:
                 continue
             out_vecs.append(v.astype(np.float32))
+
         if not out_vecs:
             return None
         vcat = np.concatenate(out_vecs, axis=0).astype(np.float32)
@@ -345,18 +357,15 @@ class Emb:
     @staticmethod
     def embed_one_frame_shared_concat3(emb, S, dm_handle, lock,
                                        pregrab: int=12,
-                                       mirror_period: int=3,
+                                       mirror_period: int=3,          # 사용 안함(한 프레임에서 3ROI)
                                        mirror_shrink: float=0.08,
                                        center_shrink: float=0.0,
                                        rois3: Optional[List[Tuple[int,int,int,int,int]]]=None) -> Optional[np.ndarray]:
         """
-        퍼시스턴트 카메라(shared) 또는 별도 카메라에서
-        [center, mirrorL, mirrorR] 3뷰 임베딩을 concat하여 반환.
-        - pregrab: 시작 전 프레임 비우기
-        - mirror_period: 좌/우 뷰 캡쳐 전 추가 프레임 횟수(최신화)
-        - *_shrink: ROI 내부 가장자리 제거 비율 (0~0.4 권장)
+        최신 프레임 1장을 읽어 [center, left-mirror, right-mirror] 3개 ROI를 모두 잘라
+        각 ROI를 ONNX에 넣고 concat(3*128=384) → L2 normalize 해서 반환.
         """
-        # default rois3
+        # 기본 rois3
         if (not rois3) or len(rois3) < 3:
             rois3 = [
                 (540, 540, +103, -260, 0),  # center
@@ -364,7 +373,15 @@ class Emb:
                 (270, 440, +630, -170, 1),  # right mirror
             ]
 
-        # === shared (DM persistent) 경로 ===
+        def _read_nonnull_frame_dm(dm_read, cap, tries=8, sleep_s=0.003):
+            for _ in range(max(1, int(tries))):
+                frm = dm_read(cap)
+                if frm is not None:
+                    return frm
+                time.sleep(float(sleep_s))
+            return None
+
+        # DM 퍼시스턴트(공유) 경로
         if same_device(S.dm.camera, S.embedding.cam_dev) and (dm_handle is not None):
             try:
                 from datamatrix import read_frame_nonblocking as dm_read
@@ -372,55 +389,29 @@ class Emb:
                 print("[embed.concat3] datamatrix import 실패:", e)
                 return None
             try:
-                frames = [None, None, None]  # center, left, right
                 with lock:
                     # flush
-                    for _ in range(max(0, pregrab)):
+                    for _ in range(max(0, int(pregrab))):
                         _ = dm_read(dm_handle[1].cap)
-
-                    # center capture
-                    frames[0] = dm_read(dm_handle[1].cap)
-
-                    # left capture after mirror_period grabs
-                    for _ in range(max(0, mirror_period)):
-                        _ = dm_read(dm_handle[1].cap)
-                    frames[1] = dm_read(dm_handle[1].cap)
-
-                    # right capture after mirror_period grabs
-                    for _ in range(max(0, mirror_period)):
-                        _ = dm_read(dm_handle[1].cap)
-                    frames[2] = dm_read(dm_handle[1].cap)
-
-                # 각 프레임에서 해당 ROI의 임베딩 추출
-                vecs = []
-                # center
-                if frames[0] is not None:
-                    v0 = Emb._embed_views_from_frame(emb, frames[0],
-                                                     [rois3[0]], center_shrink, mirror_shrink)
-                    if v0 is not None and v0.size > 0:
-                        vecs.append(v0.astype(np.float32))
-                # left
-                if frames[1] is not None:
-                    v1 = Emb._embed_views_from_frame(emb, frames[1],
-                                                     [rois3[1]], center_shrink, mirror_shrink)
-                    if v1 is not None and v1.size > 0:
-                        vecs.append(v1.astype(np.float32))
-                # right
-                if frames[2] is not None:
-                    v2 = Emb._embed_views_from_frame(emb, frames[2],
-                                                     [rois3[2]], center_shrink, mirror_shrink)
-                    if v2 is not None and v2.size > 0:
-                        vecs.append(v2.astype(np.float32))
-
-                if not vecs:
+                    # 최신 프레임 1장 확보
+                    bgr = _read_nonnull_frame_dm(dm_read, dm_handle[1].cap, tries=8, sleep_s=0.003)
+                if bgr is None:
                     return None
-                vcat = np.concatenate(vecs, axis=0).astype(np.float32)
-                return l2_normalize(vcat)
+
+                vcat = Emb._embed_views_from_frame(
+                    emb, bgr, rois3=rois3,
+                    center_shrink=float(center_shrink),
+                    mirror_shrink=float(mirror_shrink)
+                )
+                if vcat is not None:
+                    # 진단 로그(최초 몇 번만 찍힘)
+                    print(f"[embed.concat3] one-frame 3ROI → emb_len={vcat.shape[0]}")
+                return vcat
             except Exception as e:
                 print("[embed.concat3] shared path error:", e)
                 return None
 
-        # === separate device 경로 ===
+        # 별도 카메라 경로
         try:
             cap = Emb._open_camera(S.embedding.cam_dev, w=S.embedding.width, h=S.embedding.height,
                                    fps=S.embedding.fps, pixfmt=S.embedding.pixfmt or "YUYV")
@@ -429,39 +420,20 @@ class Emb:
             return None
 
         try:
-            # flush
-            for _ in range(max(0, pregrab)):
+            for _ in range(max(0, int(pregrab))):
                 cap.grab()
-
-            vecs = []
-
-            # center
-            ok, fr = cap.read()
-            if ok:
-                v0 = Emb._embed_views_from_frame(emb, fr, [rois3[0]], center_shrink, mirror_shrink)
-                if v0 is not None and v0.size > 0:
-                    vecs.append(v0.astype(np.float32))
-
-            # left
-            for _ in range(max(0, mirror_period)): cap.grab()
-            ok, fr = cap.read()
-            if ok:
-                v1 = Emb._embed_views_from_frame(emb, fr, [rois3[1]], center_shrink, mirror_shrink)
-                if v1 is not None and v1.size > 0:
-                    vecs.append(v1.astype(np.float32))
-
-            # right
-            for _ in range(max(0, mirror_period)): cap.grab()
-            ok, fr = cap.read()
-            if ok:
-                v2 = Emb._embed_views_from_frame(emb, fr, [rois3[2]], center_shrink, mirror_shrink)
-                if v2 is not None and v2.size > 0:
-                    vecs.append(v2.astype(np.float32))
-
-            if not vecs:
+            ok, bgr = cap.read()
+            if not ok:
                 return None
-            vcat = np.concatenate(vecs, axis=0).astype(np.float32)
-            return l2_normalize(vcat)
+
+            vcat = Emb._embed_views_from_frame(
+                emb, bgr, rois3=rois3,
+                center_shrink=float(center_shrink),
+                mirror_shrink=float(mirror_shrink)
+            )
+            if vcat is not None:
+                print(f"[embed.concat3] one-frame 3ROI (separate) → emb_len={vcat.shape[0]}")
+            return vcat
         except Exception as e:
             print("[embed.concat3] separate device error:", e)
             return None

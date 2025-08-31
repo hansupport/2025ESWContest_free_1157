@@ -203,7 +203,7 @@ def apply_embedding_overrides(S):
     try:
         cleaned = []
         for item in E.rois3[:3]:
-            w,h,dx,dy,hf = item
+            w, h, dx, dy, hf = item
             cleaned.append([int(w), int(h), int(dx), int(dy), int(hf)])
         if len(cleaned) < 3:
             # 부족하면 기본으로 채우기

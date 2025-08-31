@@ -438,61 +438,38 @@ def _burst_flush(dm_handle, rois, n=10, to_sec=0.001):
         pass
 
 # =======================
-# 임베딩 모드 래퍼 (3뷰 concat 지원)
+# 임베딩 모드 래퍼 (3뷰 concat 지원; pregrab 최소화)
 # =======================
 
 def _inject_default_embedding_options(S):
-    # S.embedding 공간 보정
+    # 옵션 존재 보정(값은 Emb 구현이 처리)
     if not hasattr(S, 'embedding'):
         class _E: pass
         S.embedding = _E()
-
-    # concat3 스위치 (설정 또는 환경변수)
     if not hasattr(S.embedding, 'concat3'):
         S.embedding.concat3 = bool(int(os.getenv("EMB_CONCAT3", "0")))
-    # 미러 캐시 주기
     if not hasattr(S.embedding, 'mirror_period'):
         S.embedding.mirror_period = int(os.getenv("EMB_MIRROR_PERIOD", "3"))
-    # shrink 비율
-    if not hasattr(S.embedding, 'mirror_shrink'):
-        S.embedding.mirror_shrink = float(os.getenv("EMB_MIRROR_SHRINK", "0.08"))
-    if not hasattr(S.embedding, 'center_shrink'):
-        S.embedding.center_shrink = float(os.getenv("EMB_CENTER_SHRINK", "0.00"))
+    if not hasattr(S.embedding, 'rois3'):
+        S.embedding.rois3 = None  # Emb 내부 기본 또는 dm.rois 활용
 
-    # 3뷰 ROI 기본값 (w,h,dx,dy,hflip)
-    default_rois3 = [
-        (540, 540, +103, -260, 0),  # center
-        (240, 460, -380, -170, 1),  # left mirror
-        (270, 440, +630, -170, 1),  # right mirror
-    ]
-    if not hasattr(S.embedding, 'rois3') or not S.embedding.rois3:
-        S.embedding.rois3 = default_rois3
-
-def _embed_one_any(emb, S, dm_handle, pregrab=12):
+def _embed_one_any(emb, S, dm_handle, pregrab=0):
     """
-    Emb 안에 concat3용 함수가 구현되어 있으면 사용,
-    아니면 기존 단일뷰 embed_one_frame_shared로 폴백.
+    Emb에 concat3 경로가 있으면 사용, 없으면 단일뷰로 폴백.
+    pregrab은 CPU-only에선 0 권장(프레임 대기 제거).
     """
-    # 우선 concat3를 희망하는지 확인
-    want_concat3 = (hasattr(S, 'embedding') and getattr(S.embedding, 'concat3', False))
-    if want_concat3:
-        # core.lite.Emb 안에 구현되어 있는지 동적 탐색
-        # (예: embed_one_frame_shared_concat3(emb, S, dm_handle, dm_lock, pregrab=..., mirror_period=...))
-        if hasattr(Emb, "embed_one_frame_shared_concat3"):
-            try:
-                return Emb.embed_one_frame_shared_concat3(
-                    emb, S, dm_handle, DM.lock(),
-                    pregrab=pregrab,
-                    mirror_period=int(getattr(S.embedding, 'mirror_period', 3)),
-                    mirror_shrink=float(getattr(S.embedding, 'mirror_shrink', 0.08)),
-                    center_shrink=float(getattr(S.embedding, 'center_shrink', 0.0)),
-                    rois3=getattr(S.embedding, 'rois3', None)
-                )
-            except Exception as e:
-                print("[embed] concat3 경로 예외 → 단일뷰 폴백:", e)
-
-    # 폴백: 단일뷰
-    return Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=pregrab)
+    want_concat3 = bool(getattr(S.embedding, 'concat3', False))
+    if want_concat3 and hasattr(Emb, "embed_one_frame_shared_concat3"):
+        try:
+            return Emb.embed_one_frame_shared_concat3(
+                emb, S, dm_handle, DM.lock(),
+                pregrab=int(pregrab),
+                mirror_period=int(getattr(S.embedding, 'mirror_period', 3)),
+                rois3=getattr(S.embedding, 'rois3', None)
+            )
+        except Exception as e:
+            print("[embed] concat3 경로 예외 → 단일뷰 폴백:", e)
+    return Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=int(pregrab))
 
 def main():
     t_all = time.time()
@@ -523,7 +500,7 @@ def main():
         if not hasattr(S.model, 'topk'):            S.model.topk = 3
         if not hasattr(S.model, 'type'):            S.model.type = "lgbm"
 
-    # 3뷰 옵션 기본 주입(+환경변수)
+    # 3뷰 옵션 기본값 주입
     _inject_default_embedding_options(S)
 
     # UI 시작
@@ -637,10 +614,8 @@ def main():
 
     # 임베딩 모드 안내
     if getattr(S.embedding, 'concat3', False):
-        print("[embed] 3-view concat 모드 활성: mirror_period={} center_shrink={} mirror_shrink={}".format(
-            int(getattr(S.embedding, 'mirror_period', 3)),
-            float(getattr(S.embedding, 'center_shrink', 0.0)),
-            float(getattr(S.embedding, 'mirror_shrink', 0.08))
+        print("[embed] 3-view concat 모드 활성: mirror_period={}".format(
+            int(getattr(S.embedding, 'mirror_period', 3))
         ))
     else:
         print("[embed] 단일뷰 모드")
@@ -654,6 +629,9 @@ def main():
         print("[hint] UI: http://localhost:8000")
 
     paused = False
+
+    # 임베딩 트리거 시 pregrab(프레임 선확보) — CPU-only/6fps 환경에선 0 권장
+    EMB_PREGRAB_ON_TRIGGER = int(os.getenv("EMB_PREGRAB_ON_TRIGGER", "0"))
 
     try:
         DM_TRACE_ID = 0
@@ -771,8 +749,7 @@ def main():
                             _SCAN_BUSY.clear()
                             continue
                         t_emb0 = t_now()
-                        # 여기서 임베딩은 1뷰/3뷰 모드에 따라 자동 선택
-                        vec = _embed_one_any(emb, S, dm_handle, pregrab=12)
+                        vec = _embed_one_any(emb, S, dm_handle, pregrab=EMB_PREGRAB_ON_TRIGGER)  # ★ pregrab=0
                         t_emb1 = t_now()
                         print("[D#{}][{}] embed_one_frame elapsed={}".format(tid, ts_wall(), ms(t_emb1 - t_emb0)))
                         if vec is None:
@@ -801,7 +778,7 @@ def main():
 
                     # 3) 임베딩 (단일/3뷰 자동)
                     t_emb0 = t_now()
-                    vec = _embed_one_any(emb, S, dm_handle, pregrab=12)
+                    vec = _embed_one_any(emb, S, dm_handle, pregrab=EMB_PREGRAB_ON_TRIGGER)  # ★ pregrab=0
                     t_emb1 = t_now()
                     print("[D#{}][{}] embed_one_frame elapsed={}".format(tid, ts_wall(), ms(t_emb1 - t_emb0)))
                     if vec is None:
@@ -816,7 +793,7 @@ def main():
                     # 4) 저장
                     Storage.on_sample_record(conn, feat, vec, product_id=None, has_label=0, origin="manual_no_dm")
 
-                    # === 벡터 구성(15 + D) ===
+                    # === 벡터 구성(15 + emb) ===
                     meta = np.array([
                         feat["d1"], feat["d2"], feat["d3"],
                         feat["mad1"], feat["mad2"], feat["mad3"],

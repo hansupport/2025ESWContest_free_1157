@@ -1,6 +1,6 @@
 embedding:
   cam_dev: "/dev/video2"
-  pixfmt: "YUYV"
+  pixfmt: "YUYV"          # Nano에서 MJPG가 더 느린 경우가 꽤 있음 → 우선 YUYV 유지
   width: 848
   height: 480
   fps: 6
@@ -21,20 +21,20 @@ embedding:
   # 런타임에 로드할 ONNX 모델 경로
   weights_path: "model/weights/tinymnet_emb_128d_w035.onnx"
 
-  # E2E warmup
-  e2e_warmup_frames: 12
-  e2e_pregrab: 2
+  # E2E warmup (시동 시간 단축)
+  e2e_warmup_frames: 6     # 12 → 6으로 줄여 초기 워밍업 시간 절약
+  e2e_pregrab: 0           # ★ 트리거 시 추가 grab 비활성화(지연 최소화)
 
-  # ===== 새로 추가: 3뷰 concat 임베딩 =====
-  concat3: 1              # 3뷰 사용(0=off, 1=on)
-  mirror_period: 3        # 좌/우 캡처 전 추가 grab 수(최신 프레임 확보)
-  center_shrink: 0.00     # 중앙 ROI 내부 테두리 제거 비율(0.0~0.4 권장)
-  mirror_shrink: 0.00     # 거울 ROI 내부 테두리 제거 비율(배경 노이즈 감소)
+  # 3뷰 concat 임베딩
+  concat3: true           # 단일 뷰 추론(권장). true로 켜면 지연 증가 가능
+  mirror_period: 3         # (미사용, 유지)
+  center_shrink: 0.00      # (미사용, 유지)
+  mirror_shrink: 0.00      # (미사용, 유지)
   # rois3: [w, h, dx, dy, hflip]  (center, left-mirror, right-mirror)
   rois3:
     - [520, 550,   90, -160, 0]   # center (hflip off)
-    - [270, 470, -450, -160, 1]   # left mirror  (hflip on)
-    - [260, 460,  670, -170, 1]   # right mirror (hflip on)
+    - [320, 470, -420, -160, 1]   # left mirror  (hflip on)
+    - [330, 480,  630, -180, 1]   # right mirror (hflip on)
 
 depth:
   width: 1280
@@ -86,7 +86,7 @@ model:
   centroids_path: "centroids.npz"
   lgbm_path: "lgbm.pkl"
   topk: 3
-  # (옵션) 필요시 아래도 지정 가능
+  # (옵션)
   # top1_threshold: 0.40
   # smooth_window: 3
   # smooth_min_votes: 2
@@ -101,8 +101,20 @@ lgbm:
   feature_fraction: 0.8
   bagging_fraction: 0.8
   bagging_freq: 1
-  class_weight: "balanced"
+  # class_weight: "balanced"   # sklearn 래퍼용 개념이라 lgb.train 경로에선 미사용
   seed: 42
+  cv_k: 5                      # K-fold 수 (그리드/평가 공통)
+
+# ↓ 이 섹션이 존재하면 train.py가 자동으로 Grid Search 수행 (--grid 1 없이도 동작)
+lgbm_grid:
+  learning_rate: [0.03, 0.05, 0.08]
+  num_leaves: [31, 63]
+  min_data_in_leaf: [10, 20, 40]
+  feature_fraction: [0.70, 0.85]
+  bagging_fraction: [0.70, 0.90]
+  bagging_freq: [1]
+  n_estimators: [200, 400]
+  max_depth: [-1, 12]          # 선택적: 깊이 제한 테스트
 
 training:
   min_count: 2

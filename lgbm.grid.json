@@ -1,0 +1,6651 @@
+{
+  "trials": [
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9155298677113306,
+      "folds": 5,
+      "best_iters": [
+        54,
+        6,
+        50,
+        57,
+        33
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9155298677113306,
+      "folds": 5,
+      "best_iters": [
+        54,
+        6,
+        50,
+        57,
+        33
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9155298677113306,
+      "folds": 5,
+      "best_iters": [
+        54,
+        6,
+        50,
+        57,
+        33
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9155298677113306,
+      "folds": 5,
+      "best_iters": [
+        54,
+        6,
+        50,
+        57,
+        33
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        56,
+        26,
+        10,
+        43,
+        11
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        56,
+        26,
+        10,
+        43,
+        11
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        56,
+        26,
+        10,
+        43,
+        11
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        56,
+        26,
+        10,
+        43,
+        11
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9154482183951436,
+      "folds": 5,
+      "best_iters": [
+        48,
+        11,
+        16,
+        63,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9154482183951436,
+      "folds": 5,
+      "best_iters": [
+        48,
+        11,
+        16,
+        63,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9154482183951436,
+      "folds": 5,
+      "best_iters": [
+        48,
+        11,
+        16,
+        63,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9154482183951436,
+      "folds": 5,
+      "best_iters": [
+        48,
+        11,
+        16,
+        63,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        57,
+        53,
+        49,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        57,
+        53,
+        49,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        57,
+        53,
+        49,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        57,
+        53,
+        49,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        56,
+        48,
+        105,
+        53,
+        16
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        56,
+        48,
+        105,
+        53,
+        16
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        56,
+        48,
+        105,
+        53,
+        16
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        56,
+        48,
+        105,
+        53,
+        16
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9213269691606059,
+      "folds": 5,
+      "best_iters": [
+        40,
+        48,
+        49,
+        48,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9213269691606059,
+      "folds": 5,
+      "best_iters": [
+        40,
+        48,
+        49,
+        48,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9213269691606059,
+      "folds": 5,
+      "best_iters": [
+        40,
+        48,
+        49,
+        48,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9213269691606059,
+      "folds": 5,
+      "best_iters": [
+        40,
+        48,
+        49,
+        48,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        49,
+        118,
+        108,
+        63,
+        63
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        49,
+        118,
+        108,
+        63,
+        63
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        49,
+        118,
+        108,
+        63,
+        63
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        49,
+        118,
+        108,
+        63,
+        63
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9098144155782422,
+      "folds": 5,
+      "best_iters": [
+        36,
+        49,
+        14,
+        51,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9098144155782422,
+      "folds": 5,
+      "best_iters": [
+        36,
+        49,
+        14,
+        51,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9098144155782422,
+      "folds": 5,
+      "best_iters": [
+        36,
+        49,
+        14,
+        51,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9098144155782422,
+      "folds": 5,
+      "best_iters": [
+        36,
+        49,
+        14,
+        51,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        71,
+        80,
+        198,
+        34,
+        58
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        71,
+        80,
+        198,
+        34,
+        58
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9125541416056395,
+      "folds": 5,
+      "best_iters": [
+        71,
+        80,
+        150,
+        34,
+        58
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9125541416056395,
+      "folds": 5,
+      "best_iters": [
+        71,
+        80,
+        150,
+        34,
+        58
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        70,
+        99,
+        86,
+        11,
+        72
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        70,
+        99,
+        86,
+        11,
+        72
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        70,
+        99,
+        86,
+        11,
+        72
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        70,
+        99,
+        86,
+        11,
+        72
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        69,
+        103,
+        73,
+        22,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        69,
+        103,
+        73,
+        22,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        69,
+        103,
+        73,
+        22,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        69,
+        103,
+        73,
+        22,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9041850866964742,
+      "folds": 5,
+      "best_iters": [
+        70,
+        58,
+        27,
+        14,
+        121
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9041850866964742,
+      "folds": 5,
+      "best_iters": [
+        70,
+        58,
+        27,
+        14,
+        121
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9041850866964742,
+      "folds": 5,
+      "best_iters": [
+        70,
+        58,
+        27,
+        14,
+        121
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9041850866964742,
+      "folds": 5,
+      "best_iters": [
+        70,
+        58,
+        27,
+        14,
+        121
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9155298677113306,
+      "folds": 5,
+      "best_iters": [
+        54,
+        6,
+        50,
+        57,
+        33
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9155298677113306,
+      "folds": 5,
+      "best_iters": [
+        54,
+        6,
+        50,
+        57,
+        33
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9155298677113306,
+      "folds": 5,
+      "best_iters": [
+        54,
+        6,
+        50,
+        57,
+        33
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9155298677113306,
+      "folds": 5,
+      "best_iters": [
+        54,
+        6,
+        50,
+        57,
+        33
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        56,
+        26,
+        10,
+        43,
+        11
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        56,
+        26,
+        10,
+        43,
+        11
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        56,
+        26,
+        10,
+        43,
+        11
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        56,
+        26,
+        10,
+        43,
+        11
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9154482183951436,
+      "folds": 5,
+      "best_iters": [
+        48,
+        11,
+        16,
+        63,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9154482183951436,
+      "folds": 5,
+      "best_iters": [
+        48,
+        11,
+        16,
+        63,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9154482183951436,
+      "folds": 5,
+      "best_iters": [
+        48,
+        11,
+        16,
+        63,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9154482183951436,
+      "folds": 5,
+      "best_iters": [
+        48,
+        11,
+        16,
+        63,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        57,
+        53,
+        49,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        57,
+        53,
+        49,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        57,
+        53,
+        49,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        57,
+        53,
+        49,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        56,
+        48,
+        105,
+        53,
+        16
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        56,
+        48,
+        105,
+        53,
+        16
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        56,
+        48,
+        105,
+        53,
+        16
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        56,
+        48,
+        105,
+        53,
+        16
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9213269691606059,
+      "folds": 5,
+      "best_iters": [
+        40,
+        48,
+        49,
+        48,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9213269691606059,
+      "folds": 5,
+      "best_iters": [
+        40,
+        48,
+        49,
+        48,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9213269691606059,
+      "folds": 5,
+      "best_iters": [
+        40,
+        48,
+        49,
+        48,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9213269691606059,
+      "folds": 5,
+      "best_iters": [
+        40,
+        48,
+        49,
+        48,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        49,
+        118,
+        108,
+        63,
+        63
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        49,
+        118,
+        108,
+        63,
+        63
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        49,
+        118,
+        108,
+        63,
+        63
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        49,
+        118,
+        108,
+        63,
+        63
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9098144155782422,
+      "folds": 5,
+      "best_iters": [
+        36,
+        49,
+        14,
+        51,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9098144155782422,
+      "folds": 5,
+      "best_iters": [
+        36,
+        49,
+        14,
+        51,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9098144155782422,
+      "folds": 5,
+      "best_iters": [
+        36,
+        49,
+        14,
+        51,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9098144155782422,
+      "folds": 5,
+      "best_iters": [
+        36,
+        49,
+        14,
+        51,
+        13
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        71,
+        80,
+        198,
+        34,
+        58
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        71,
+        80,
+        198,
+        34,
+        58
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9125541416056395,
+      "folds": 5,
+      "best_iters": [
+        71,
+        80,
+        150,
+        34,
+        58
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9125541416056395,
+      "folds": 5,
+      "best_iters": [
+        71,
+        80,
+        150,
+        34,
+        58
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        70,
+        99,
+        86,
+        11,
+        72
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        70,
+        99,
+        86,
+        11,
+        72
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        70,
+        99,
+        86,
+        11,
+        72
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        70,
+        99,
+        86,
+        11,
+        72
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        69,
+        103,
+        73,
+        22,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        69,
+        103,
+        73,
+        22,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        69,
+        103,
+        73,
+        22,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9069203387887381,
+      "folds": 5,
+      "best_iters": [
+        69,
+        103,
+        73,
+        22,
+        81
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9041850866964742,
+      "folds": 5,
+      "best_iters": [
+        70,
+        58,
+        27,
+        14,
+        121
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9041850866964742,
+      "folds": 5,
+      "best_iters": [
+        70,
+        58,
+        27,
+        14,
+        121
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9041850866964742,
+      "folds": 5,
+      "best_iters": [
+        70,
+        58,
+        27,
+        14,
+        121
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.03,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9041850866964742,
+      "folds": 5,
+      "best_iters": [
+        70,
+        58,
+        27,
+        14,
+        121
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9181879444225409,
+      "folds": 5,
+      "best_iters": [
+        28,
+        42,
+        32,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9181879444225409,
+      "folds": 5,
+      "best_iters": [
+        28,
+        42,
+        32,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9181879444225409,
+      "folds": 5,
+      "best_iters": [
+        28,
+        42,
+        32,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9181879444225409,
+      "folds": 5,
+      "best_iters": [
+        28,
+        42,
+        32,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        49,
+        23,
+        37,
+        31,
+        57
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        49,
+        23,
+        38,
+        31,
+        57
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        49,
+        23,
+        37,
+        31,
+        57
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        49,
+        23,
+        38,
+        31,
+        57
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9182651198035943,
+      "folds": 5,
+      "best_iters": [
+        44,
+        27,
+        38,
+        25,
+        12
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9182651198035943,
+      "folds": 5,
+      "best_iters": [
+        44,
+        27,
+        38,
+        25,
+        12
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9182651198035943,
+      "folds": 5,
+      "best_iters": [
+        44,
+        27,
+        38,
+        25,
+        12
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9182651198035943,
+      "folds": 5,
+      "best_iters": [
+        44,
+        27,
+        38,
+        25,
+        12
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        35,
+        23,
+        22,
+        30,
+        54
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        35,
+        23,
+        22,
+        30,
+        54
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        35,
+        23,
+        22,
+        30,
+        54
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        35,
+        23,
+        22,
+        30,
+        54
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        41,
+        27,
+        64,
+        56,
+        49
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        41,
+        27,
+        64,
+        56,
+        49
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        41,
+        27,
+        64,
+        56,
+        49
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        41,
+        27,
+        64,
+        56,
+        49
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9240666951880032,
+      "folds": 5,
+      "best_iters": [
+        23,
+        34,
+        80,
+        33,
+        75
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9240666951880032,
+      "folds": 5,
+      "best_iters": [
+        23,
+        34,
+        80,
+        33,
+        75
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9240666951880032,
+      "folds": 5,
+      "best_iters": [
+        23,
+        34,
+        80,
+        33,
+        75
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9240666951880032,
+      "folds": 5,
+      "best_iters": [
+        23,
+        34,
+        80,
+        33,
+        75
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        32,
+        31,
+        52,
+        88,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        32,
+        31,
+        52,
+        88,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        32,
+        31,
+        52,
+        88,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        32,
+        31,
+        52,
+        88,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        26,
+        39,
+        31,
+        55
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        26,
+        39,
+        31,
+        55
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        26,
+        39,
+        31,
+        55
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        26,
+        39,
+        31,
+        55
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9096555908810018,
+      "folds": 5,
+      "best_iters": [
+        53,
+        51,
+        84,
+        57,
+        41
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9096555908810018,
+      "folds": 5,
+      "best_iters": [
+        53,
+        51,
+        84,
+        57,
+        41
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9096555908810018,
+      "folds": 5,
+      "best_iters": [
+        53,
+        51,
+        84,
+        57,
+        41
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9096555908810018,
+      "folds": 5,
+      "best_iters": [
+        53,
+        51,
+        84,
+        57,
+        41
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9155343416464641,
+      "folds": 5,
+      "best_iters": [
+        53,
+        34,
+        50,
+        40,
+        94
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9155343416464641,
+      "folds": 5,
+      "best_iters": [
+        53,
+        34,
+        50,
+        40,
+        94
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9155343416464641,
+      "folds": 5,
+      "best_iters": [
+        53,
+        34,
+        50,
+        40,
+        94
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9155343416464641,
+      "folds": 5,
+      "best_iters": [
+        53,
+        34,
+        50,
+        40,
+        94
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        46,
+        83,
+        111,
+        22,
+        42
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        46,
+        83,
+        111,
+        22,
+        42
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        46,
+        83,
+        111,
+        22,
+        42
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        46,
+        83,
+        111,
+        22,
+        42
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9098188895133758,
+      "folds": 5,
+      "best_iters": [
+        46,
+        34,
+        22,
+        26,
+        83
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9098188895133758,
+      "folds": 5,
+      "best_iters": [
+        46,
+        34,
+        22,
+        26,
+        83
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9098188895133758,
+      "folds": 5,
+      "best_iters": [
+        46,
+        34,
+        22,
+        26,
+        83
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9098188895133758,
+      "folds": 5,
+      "best_iters": [
+        46,
+        34,
+        22,
+        26,
+        83
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9181879444225409,
+      "folds": 5,
+      "best_iters": [
+        28,
+        42,
+        32,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9181879444225409,
+      "folds": 5,
+      "best_iters": [
+        28,
+        42,
+        32,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9181879444225409,
+      "folds": 5,
+      "best_iters": [
+        28,
+        42,
+        32,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9181879444225409,
+      "folds": 5,
+      "best_iters": [
+        28,
+        42,
+        32,
+        47,
+        14
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        49,
+        23,
+        37,
+        31,
+        57
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        49,
+        23,
+        38,
+        31,
+        57
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        49,
+        23,
+        37,
+        31,
+        57
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        49,
+        23,
+        38,
+        31,
+        57
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9182651198035943,
+      "folds": 5,
+      "best_iters": [
+        44,
+        27,
+        38,
+        25,
+        12
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9182651198035943,
+      "folds": 5,
+      "best_iters": [
+        44,
+        27,
+        38,
+        25,
+        12
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9182651198035943,
+      "folds": 5,
+      "best_iters": [
+        44,
+        27,
+        38,
+        25,
+        12
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9182651198035943,
+      "folds": 5,
+      "best_iters": [
+        44,
+        27,
+        38,
+        25,
+        12
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        35,
+        23,
+        22,
+        30,
+        54
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        35,
+        23,
+        22,
+        30,
+        54
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        35,
+        23,
+        22,
+        30,
+        54
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        35,
+        23,
+        22,
+        30,
+        54
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        41,
+        27,
+        64,
+        56,
+        49
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        41,
+        27,
+        64,
+        56,
+        49
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        41,
+        27,
+        64,
+        56,
+        49
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        41,
+        27,
+        64,
+        56,
+        49
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9240666951880032,
+      "folds": 5,
+      "best_iters": [
+        23,
+        34,
+        80,
+        33,
+        75
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9240666951880032,
+      "folds": 5,
+      "best_iters": [
+        23,
+        34,
+        80,
+        33,
+        75
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9240666951880032,
+      "folds": 5,
+      "best_iters": [
+        23,
+        34,
+        80,
+        33,
+        75
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9240666951880032,
+      "folds": 5,
+      "best_iters": [
+        23,
+        34,
+        80,
+        33,
+        75
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        32,
+        31,
+        52,
+        88,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        32,
+        31,
+        52,
+        88,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        32,
+        31,
+        52,
+        88,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9239850458718163,
+      "folds": 5,
+      "best_iters": [
+        32,
+        31,
+        52,
+        88,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        26,
+        39,
+        31,
+        55
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        26,
+        39,
+        31,
+        55
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        26,
+        39,
+        31,
+        55
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        26,
+        39,
+        31,
+        55
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9096555908810018,
+      "folds": 5,
+      "best_iters": [
+        53,
+        51,
+        84,
+        57,
+        41
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9096555908810018,
+      "folds": 5,
+      "best_iters": [
+        53,
+        51,
+        84,
+        57,
+        41
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9096555908810018,
+      "folds": 5,
+      "best_iters": [
+        53,
+        51,
+        84,
+        57,
+        41
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9096555908810018,
+      "folds": 5,
+      "best_iters": [
+        53,
+        51,
+        84,
+        57,
+        41
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9155343416464641,
+      "folds": 5,
+      "best_iters": [
+        53,
+        34,
+        50,
+        40,
+        94
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9155343416464641,
+      "folds": 5,
+      "best_iters": [
+        53,
+        34,
+        50,
+        40,
+        94
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9155343416464641,
+      "folds": 5,
+      "best_iters": [
+        53,
+        34,
+        50,
+        40,
+        94
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9155343416464641,
+      "folds": 5,
+      "best_iters": [
+        53,
+        34,
+        50,
+        40,
+        94
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        46,
+        83,
+        111,
+        22,
+        42
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        46,
+        83,
+        111,
+        22,
+        42
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        46,
+        83,
+        111,
+        22,
+        42
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9097372401971887,
+      "folds": 5,
+      "best_iters": [
+        46,
+        83,
+        111,
+        22,
+        42
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9098188895133758,
+      "folds": 5,
+      "best_iters": [
+        46,
+        34,
+        22,
+        26,
+        83
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9098188895133758,
+      "folds": 5,
+      "best_iters": [
+        46,
+        34,
+        22,
+        26,
+        83
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9098188895133758,
+      "folds": 5,
+      "best_iters": [
+        46,
+        34,
+        22,
+        26,
+        83
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.05,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9098188895133758,
+      "folds": 5,
+      "best_iters": [
+        46,
+        34,
+        22,
+        26,
+        83
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        54,
+        19,
+        44,
+        54,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        20,
+        19,
+        44,
+        54,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        54,
+        19,
+        44,
+        54,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        20,
+        19,
+        44,
+        54,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9125496676705058,
+      "folds": 5,
+      "best_iters": [
+        6,
+        10,
+        9,
+        4,
+        36
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9125496676705058,
+      "folds": 5,
+      "best_iters": [
+        6,
+        10,
+        9,
+        4,
+        36
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9125496676705058,
+      "folds": 5,
+      "best_iters": [
+        6,
+        10,
+        9,
+        4,
+        36
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9125496676705058,
+      "folds": 5,
+      "best_iters": [
+        6,
+        10,
+        9,
+        4,
+        36
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        22,
+        17,
+        47,
+        15,
+        40
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        22,
+        17,
+        47,
+        15,
+        40
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        22,
+        17,
+        47,
+        15,
+        40
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        22,
+        17,
+        47,
+        15,
+        40
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9152893936979032,
+      "folds": 5,
+      "best_iters": [
+        22,
+        16,
+        14,
+        20,
+        35
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9152893936979032,
+      "folds": 5,
+      "best_iters": [
+        22,
+        16,
+        14,
+        20,
+        35
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9152893936979032,
+      "folds": 5,
+      "best_iters": [
+        22,
+        16,
+        14,
+        20,
+        35
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9152893936979032,
+      "folds": 5,
+      "best_iters": [
+        22,
+        16,
+        14,
+        20,
+        35
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        30,
+        35,
+        47,
+        26,
+        45
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        30,
+        35,
+        47,
+        26,
+        45
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        30,
+        35,
+        47,
+        26,
+        45
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        30,
+        35,
+        47,
+        26,
+        45
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9211681444633655,
+      "folds": 5,
+      "best_iters": [
+        19,
+        19,
+        9,
+        21,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9211681444633655,
+      "folds": 5,
+      "best_iters": [
+        19,
+        19,
+        9,
+        21,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9211681444633655,
+      "folds": 5,
+      "best_iters": [
+        19,
+        19,
+        9,
+        21,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9211681444633655,
+      "folds": 5,
+      "best_iters": [
+        19,
+        19,
+        9,
+        21,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        30,
+        26,
+        45,
+        18,
+        71
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        30,
+        26,
+        45,
+        18,
+        71
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        30,
+        26,
+        45,
+        18,
+        71
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        30,
+        26,
+        45,
+        18,
+        71
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        15,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        15,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        15,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        15,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9153710430140901,
+      "folds": 5,
+      "best_iters": [
+        32,
+        35,
+        88,
+        46,
+        23
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9153710430140901,
+      "folds": 5,
+      "best_iters": [
+        32,
+        35,
+        88,
+        46,
+        23
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9153710430140901,
+      "folds": 5,
+      "best_iters": [
+        32,
+        35,
+        88,
+        46,
+        23
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9153710430140901,
+      "folds": 5,
+      "best_iters": [
+        32,
+        35,
+        88,
+        46,
+        23
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126357909218263,
+      "folds": 5,
+      "best_iters": [
+        27,
+        23,
+        50,
+        30,
+        47
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126357909218263,
+      "folds": 5,
+      "best_iters": [
+        27,
+        23,
+        50,
+        30,
+        47
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126357909218263,
+      "folds": 5,
+      "best_iters": [
+        27,
+        23,
+        50,
+        30,
+        47
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126357909218263,
+      "folds": 5,
+      "best_iters": [
+        27,
+        23,
+        50,
+        30,
+        47
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9154526923302772,
+      "folds": 5,
+      "best_iters": [
+        34,
+        53,
+        51,
+        55,
+        74
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9154526923302772,
+      "folds": 5,
+      "best_iters": [
+        34,
+        53,
+        51,
+        55,
+        74
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9154526923302772,
+      "folds": 5,
+      "best_iters": [
+        34,
+        53,
+        51,
+        55,
+        74
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9154526923302772,
+      "folds": 5,
+      "best_iters": [
+        34,
+        53,
+        51,
+        55,
+        74
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9268835965964538,
+      "folds": 5,
+      "best_iters": [
+        23,
+        22,
+        111,
+        18,
+        51
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9268835965964538,
+      "folds": 5,
+      "best_iters": [
+        23,
+        22,
+        111,
+        18,
+        51
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9268835965964538,
+      "folds": 5,
+      "best_iters": [
+        23,
+        22,
+        111,
+        18,
+        51
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 31,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9268835965964538,
+      "folds": 5,
+      "best_iters": [
+        23,
+        22,
+        111,
+        18,
+        51
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        54,
+        19,
+        44,
+        54,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        20,
+        19,
+        44,
+        54,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9210864951471786,
+      "folds": 5,
+      "best_iters": [
+        54,
+        19,
+        44,
+        54,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        20,
+        19,
+        44,
+        54,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9125496676705058,
+      "folds": 5,
+      "best_iters": [
+        6,
+        10,
+        9,
+        4,
+        36
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9125496676705058,
+      "folds": 5,
+      "best_iters": [
+        6,
+        10,
+        9,
+        4,
+        36
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9125496676705058,
+      "folds": 5,
+      "best_iters": [
+        6,
+        10,
+        9,
+        4,
+        36
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9125496676705058,
+      "folds": 5,
+      "best_iters": [
+        6,
+        10,
+        9,
+        4,
+        36
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        22,
+        17,
+        47,
+        15,
+        40
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        22,
+        17,
+        47,
+        15,
+        40
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        22,
+        17,
+        47,
+        15,
+        40
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9183467691197812,
+      "folds": 5,
+      "best_iters": [
+        22,
+        17,
+        47,
+        15,
+        40
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9152893936979032,
+      "folds": 5,
+      "best_iters": [
+        22,
+        16,
+        14,
+        20,
+        35
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9152893936979032,
+      "folds": 5,
+      "best_iters": [
+        22,
+        16,
+        14,
+        20,
+        35
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9152893936979032,
+      "folds": 5,
+      "best_iters": [
+        22,
+        16,
+        14,
+        20,
+        35
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 10,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9152893936979032,
+      "folds": 5,
+      "best_iters": [
+        22,
+        16,
+        14,
+        20,
+        35
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        30,
+        35,
+        47,
+        26,
+        45
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        30,
+        35,
+        47,
+        26,
+        45
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        30,
+        35,
+        47,
+        26,
+        45
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9184284184359683,
+      "folds": 5,
+      "best_iters": [
+        30,
+        35,
+        47,
+        26,
+        45
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9211681444633655,
+      "folds": 5,
+      "best_iters": [
+        19,
+        19,
+        9,
+        21,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9211681444633655,
+      "folds": 5,
+      "best_iters": [
+        19,
+        19,
+        9,
+        21,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9211681444633655,
+      "folds": 5,
+      "best_iters": [
+        19,
+        19,
+        9,
+        21,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9211681444633655,
+      "folds": 5,
+      "best_iters": [
+        19,
+        19,
+        9,
+        21,
+        28
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        30,
+        26,
+        45,
+        18,
+        71
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        30,
+        26,
+        45,
+        18,
+        71
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        30,
+        26,
+        45,
+        18,
+        71
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126313169866929,
+      "folds": 5,
+      "best_iters": [
+        30,
+        26,
+        45,
+        18,
+        71
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        15,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        15,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        15,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 20,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9241438705690566,
+      "folds": 5,
+      "best_iters": [
+        26,
+        15,
+        25,
+        28,
+        31
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9153710430140901,
+      "folds": 5,
+      "best_iters": [
+        32,
+        35,
+        88,
+        46,
+        23
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9153710430140901,
+      "folds": 5,
+      "best_iters": [
+        32,
+        35,
+        88,
+        46,
+        23
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9153710430140901,
+      "folds": 5,
+      "best_iters": [
+        32,
+        35,
+        88,
+        46,
+        23
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9153710430140901,
+      "folds": 5,
+      "best_iters": [
+        32,
+        35,
+        88,
+        46,
+        23
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126357909218263,
+      "folds": 5,
+      "best_iters": [
+        27,
+        23,
+        50,
+        30,
+        47
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126357909218263,
+      "folds": 5,
+      "best_iters": [
+        27,
+        23,
+        50,
+        30,
+        47
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9126357909218263,
+      "folds": 5,
+      "best_iters": [
+        27,
+        23,
+        50,
+        30,
+        47
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.7,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9126357909218263,
+      "folds": 5,
+      "best_iters": [
+        27,
+        23,
+        50,
+        30,
+        47
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9154526923302772,
+      "folds": 5,
+      "best_iters": [
+        34,
+        53,
+        51,
+        55,
+        74
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9154526923302772,
+      "folds": 5,
+      "best_iters": [
+        34,
+        53,
+        51,
+        55,
+        74
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9154526923302772,
+      "folds": 5,
+      "best_iters": [
+        34,
+        53,
+        51,
+        55,
+        74
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.7,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9154526923302772,
+      "folds": 5,
+      "best_iters": [
+        34,
+        53,
+        51,
+        55,
+        74
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9268835965964538,
+      "folds": 5,
+      "best_iters": [
+        23,
+        22,
+        111,
+        18,
+        51
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 200,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9268835965964538,
+      "folds": 5,
+      "best_iters": [
+        23,
+        22,
+        111,
+        18,
+        51
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": -1
+      },
+      "acc": 0.9268835965964538,
+      "folds": 5,
+      "best_iters": [
+        23,
+        22,
+        111,
+        18,
+        51
+      ]
+    },
+    {
+      "params": {
+        "n_estimators": 400,
+        "num_leaves": 63,
+        "learning_rate": 0.08,
+        "min_data_in_leaf": 40,
+        "feature_fraction": 0.85,
+        "bagging_fraction": 0.9,
+        "bagging_freq": 1,
+        "seed": 42,
+        "cv_k": 5,
+        "max_depth": 12
+      },
+      "acc": 0.9268835965964538,
+      "folds": 5,
+      "best_iters": [
+        23,
+        22,
+        111,
+        18,
+        51
+      ]
+    }
+  ],
+  "chosen": {
+    "best_params": {
+      "n_estimators": 200,
+      "num_leaves": 31,
+      "learning_rate": 0.08,
+      "min_data_in_leaf": 40,
+      "feature_fraction": 0.85,
+      "bagging_fraction": 0.9,
+      "bagging_freq": 1,
+      "seed": 42,
+      "cv_k": 5,
+      "max_depth": -1
+    },
+    "best_acc": 0.9268835965964538,
+    "best_iters": [
+      23,
+      22,
+      111,
+      18,
+      51
+    ],
+    "n_final": 23
+  }
+}
