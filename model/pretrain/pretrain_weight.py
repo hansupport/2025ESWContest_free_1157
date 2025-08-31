@@ -1,7 +1,8 @@
-# pretrain_weight.py (수정판, 전체 코드)
-# Jetson Nano (Python 3.6, torch 1.10.0 CUDA, torchvision 0.11.3 CPU)
+# pretrain_weight.py 
+# torch 1.10.0 CPU/NO CUDA, torchvision 0.11.3)
 # - model/pretrain/img_data 의 ROI 이미지를 사용해 TinyMobileNet(student)을
 #   CPU teacher로부터 코사인 증류(pretext) 사전학습
+# - 3뷰 파일명 cap_YYYYmmdd_HHMMSS_{c|lm|rm}.jpg 인식, 뷰별 증강/밸런싱 적용
 # - 결과: .pth(state_dict) + .onnx 동시 저장 → 런타임 ONNX로 바로 사용
 #
 # 사용 예:
@@ -21,6 +22,8 @@ import time
 import argparse
 from pathlib import Path
 import copy
+import math
+import random
 
 import torch
 import torch.nn as nn
@@ -52,9 +55,9 @@ DEF_EPOCHS   = 5
 DEF_BATCH    = 24
 DEF_WORKERS  = 2
 DEF_LR       = 1e-3
-DEF_USE_AMP  = True   # CUDA + PyTorch 1.10.0이면 True 권장
+DEF_USE_AMP  = True   # CUDA 사용시에만 활성됨(아래에서 자동 판단)
 
-# 디바이스: 교사=CPU, 학생=CUDA(가능 시)
+# 디바이스: 교사=CPU, 학생=CUDA(가능 시) / 여기서는 보통 CPU
 STUDENT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 TEACHER_DEVICE = "cpu"
 
@@ -62,7 +65,7 @@ IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD  = (0.229, 0.224, 0.225)
 
 # =====================
-# TinyMobileNet (학습 전용 정의: img2emb.py에 의존하지 않음)
+# TinyMobileNet (학습 전용 정의)
 # =====================
 class ConvBNAct(nn.Module):
     def __init__(self, in_ch, out_ch, k=3, s=1, g=1, act=True, use_bn=True):
@@ -123,45 +126,104 @@ class TinyMobileNet(nn.Module):
         return self.fc(x)
 
 # =====================
-# 데이터셋
+# 데이터셋 (3-view aware, shrink 미사용)
 # =====================
-class UnlabeledImageFolder(Dataset):
-    def __init__(self, root, size=128):
+def _infer_view_from_name(p: str) -> str:
+    """파일명 접미사로 뷰 추정: '_c', '_lm', '_rm' (없으면 'c'로 간주)"""
+    name = os.path.splitext(os.path.basename(p))[0].lower()
+    if name.endswith("_lm"): return "lm"
+    if name.endswith("_rm"): return "rm"
+    if name.endswith("_c"):  return "c"
+    # 예전 데이터나 임의 파일명은 center로 취급
+    return "c"
+
+def _list_images(root: Path):
+    exts = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
+    paths = []
+    for ext in exts:
+        paths += glob.glob(str(root / "**" / ("*"+ext)), recursive=True)
+    # 절대경로 + 유니크 + 정렬
+    paths = sorted({os.path.abspath(p) for p in paths})
+    return paths
+
+class ThreeViewImageDataset(Dataset):
+    """
+    - view-aware 증강:
+        center: RandomResizedCrop + RandomHorizontalFlip
+        mirror(lm, rm): RandomResizedCrop (수평플립 없음)
+    - balance_views: True면 c/lm/rm를 오버샘플링으로 균형 맞춤
+    """
+    def __init__(self, root, size=128, balance_views=True):
+        super().__init__()
         root = Path(root)
         if not root.exists():
             raise RuntimeError("DATA_DIR가 존재하지 않습니다: %s" % str(root))
-        exts = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
-        paths = []
-        for ext in exts:
-            paths += glob.glob(str(root / "**" / ("*"+ext)), recursive=True)
-        paths = sorted({os.path.abspath(p) for p in paths})
-        if not paths:
+        all_paths = _list_images(root)
+        if not all_paths:
             raise RuntimeError("이미지 파일이 없습니다: %s" % str(root))
-        self.paths = paths
-        self.tf = transforms.Compose([
-            transforms.RandomResizedCrop(size, scale=(0.6, 1.0), ratio=(0.9, 1.1)),
-            transforms.RandomHorizontalFlip(),
+
+        # 뷰 분할
+        self.view2paths = {"c": [], "lm": [], "rm": []}
+        for p in all_paths:
+            v = _infer_view_from_name(p)
+            if v not in self.view2paths: v = "c"
+            self.view2paths[v].append(p)
+
+        # 밸런싱
+        self.items = []  # (path, view)
+        if balance_views:
+            counts = {k: len(vs) for k, vs in self.view2paths.items()}
+            maxc = max(counts.values()) if counts else 0
+            for v, vs in self.view2paths.items():
+                if len(vs) == 0:  # 해당 뷰가 없으면 skip
+                    continue
+                rep = int(math.ceil(float(maxc) / float(len(vs))))
+                tmp = (vs * rep)[:maxc]
+                for p in tmp:
+                    self.items.append((p, v))
+        else:
+            for v, vs in self.view2paths.items():
+                for p in vs:
+                    self.items.append((p, v))
+
+        if not self.items:
+            raise RuntimeError("유효한 학습 항목이 없습니다(뷰 분할/밸런싱 이후 비어있음).")
+
+        # 증강(뷰별)
+        # NOTE: shrink 미사용, orientation 분포 보존 목적
+        self.tf_center = transforms.Compose([
+            transforms.RandomResizedCrop(size, scale=(0.7, 1.0), ratio=(0.95, 1.05)),
+            transforms.RandomHorizontalFlip(p=0.5),
             transforms.ColorJitter(0.2, 0.2, 0.2, 0.1),
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ])
-    def __len__(self): return len(self.paths)
+        self.tf_mirror = transforms.Compose([
+            transforms.RandomResizedCrop(size, scale=(0.7, 1.0), ratio=(0.95, 1.05)),
+            # 거울뷰: 수평 플립은 제거(분포 일치)
+            transforms.ColorJitter(0.2, 0.2, 0.2, 0.1),
+            transforms.ToTensor(),
+            transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+        ])
+
+    def __len__(self): return len(self.items)
+
     def __getitem__(self, idx):
-        p = self.paths[idx]
+        p, v = self.items[idx]
         with Image.open(p) as im:
             im = im.convert("RGB")
-        return self.tf(im)
+        if v == "c":
+            return self.tf_center(im)
+        else:
+            return self.tf_mirror(im)
 
 class EvalImageFolder(Dataset):
     def __init__(self, root, size=128):
         root = Path(root)
-        exts = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
-        paths = []
-        for ext in exts:
-            paths += glob.glob(str(root / "**" / ("*"+ext)), recursive=True)
-        self.paths = sorted({os.path.abspath(p) for p in paths})
-        if not self.paths:
+        paths = _list_images(root)
+        if not paths:
             raise RuntimeError("이미지 파일이 없습니다: %s" % str(root))
+        self.paths = paths
         self.tf = transforms.Compose([
             transforms.Resize((size, size)),
             transforms.ToTensor(),
@@ -343,6 +405,10 @@ def main():
     ap.add_argument("--teacher_weights", type=str, default=None,
                     help="오프라인 환경용 teacher 로컬 가중치(.pth) 경로")
 
+    # 3뷰 관련
+    ap.add_argument("--no_balance_views", action="store_true",
+                    help="뷰(c/lm/rm) 밸런싱 오버샘플링 비활성화")
+
     # ONNX 내보내기 스위치
     ap.add_argument("--no_export_onnx", action="store_true", help="학습 후 ONNX 저장 생략")
 
@@ -357,7 +423,7 @@ def main():
           (args.size, args.out_dim, args.width, str(args.use_dw), str(args.use_bn)))
 
     # 데이터
-    ds = UnlabeledImageFolder(args.data, size=args.size)
+    ds = ThreeViewImageDataset(args.data, size=args.size, balance_views=(not args.no_balance_views))
     dl = DataLoader(ds, batch_size=args.batch, shuffle=True,
         num_workers=args.workers, pin_memory=(STUDENT_DEVICE == "cuda"), drop_last=False)
 

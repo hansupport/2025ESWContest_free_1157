@@ -1,6 +1,0 @@
-/home/sejong/AutoPack/model/pretrain/img_data/capture_20250828_024336_roi.jpg
-/home/sejong/AutoPack/model/pretrain/img_data/capture_20250828_030031_roi.jpg
-/home/sejong/AutoPack/model/pretrain/img_data/capture_20250828_030032_roi.jpg
-/home/sejong/AutoPack/model/pretrain/img_data/capture_20250828_030323_roi.jpg
-/home/sejong/AutoPack/model/pretrain/img_data/img_dups/img_dups/capture_20250828_030324_roi.jpg
-/home/sejong/AutoPack/model/pretrain/img_data/capture_20250828_030325_roi.jpg

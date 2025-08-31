@@ -1,4 +1,5 @@
 # core/config.py
+import os
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -58,7 +59,8 @@ def get_settings(CFG: dict):
             "root": str(root),
             "db": str(root / storage.get("sqlite_path", "pack.db")),
             "centroids": str(root / model.get("centroids_path", "centroids.npz")),
-            "lgbm": str(root / model.get("lgbm_path", "lgbm.npz")),
+            # 프로젝트 구조에 맞춰 기본값을 pkl로 조정
+            "lgbm": str(root / model.get("lgbm_path", "lgbm.pkl")),
         },
         "embedding": {
             "cam_dev": emb.get("cam_dev", "/dev/video2"),
@@ -78,6 +80,14 @@ def get_settings(CFG: dict):
             "weights_path": str(emb.get("weights_path", "model/weights/tinymnet_emb_128d_w035.onnx")),
             "e2e_warmup_frames": int(emb.get("e2e_warmup_frames", 12)),
             "e2e_pregrab": int(emb.get("e2e_pregrab", 2)),
+
+            # ==== 3-뷰 concat 임베딩 관련 신규 옵션들 ====
+            # config.yaml에 있으면 그대로 반영, 없으면 apply_embedding_overrides에서 디폴트/ENV로 채움
+            "concat3": bool(emb.get("concat3", False)),
+            "mirror_period": int(emb.get("mirror_period", 3)),
+            "center_shrink": float(emb.get("center_shrink", 0.0)),
+            "mirror_shrink": float(emb.get("mirror_shrink", 0.08)),
+            "rois3": emb.get("rois3", None),  # [[w,h,dx,dy,hflip], ...] 최대 3개
         },
         "depth": {
             "width": int(depth.get("width", 1280)),
@@ -129,3 +139,75 @@ def apply_depth_overrides(depthmod, S):
                 print(f"[depth.cfg] set {k} = {d[k]}")
             except Exception as e:
                 print(f"[depth.cfg] set {k} 실패: {e}")
+
+# ===== 신규: embedding 옵션 오버레이(3뷰 concat) =====
+def apply_embedding_overrides(S):
+    """
+    S.embedding에 3-뷰(concat) 관련 기본값/환경변수/설정값을 주입.
+    config.yaml에 없거나 일부만 있어도 안전하게 동작하도록 보강.
+    """
+    if not hasattr(S, 'embedding') or S.embedding is None:
+        S.embedding = SimpleNamespace()
+
+    E = S.embedding
+
+    # 필수 기본값(기존 값이 없으면 채움)
+    if not hasattr(E, 'input_size') or E.input_size is None:
+        E.input_size = 224
+    if not hasattr(E, 'out_dim') or E.out_dim is None:
+        E.out_dim = 128
+    if not hasattr(E, 'roi_px') or E.roi_px is None:
+        E.roi_px = [540, 540]
+    if not hasattr(E, 'roi_offset') or E.roi_offset is None:
+        E.roi_offset = [103, -260]
+
+    # ----- 새 옵션 주입 -----
+    # 켜기/끄기 (ENV가 있으면 우선)
+    concat3_env = os.getenv("EMB_CONCAT3", None)
+    if concat3_env is not None:
+        try:
+            E.concat3 = bool(int(concat3_env))
+        except Exception:
+            E.concat3 = True
+    else:
+        if not hasattr(E, 'concat3'):
+            E.concat3 = False
+        else:
+            E.concat3 = bool(E.concat3)
+
+    # 미러뷰 최신화용 프레임 스텝
+    try:
+        E.mirror_period = int(os.getenv("EMB_MIRROR_PERIOD", str(getattr(E, 'mirror_period', 3))))
+    except Exception:
+        E.mirror_period = 3
+
+    # ROI 테두리 노이즈 잘라내기 (0.0~0.4 권장)
+    try:
+        E.center_shrink = float(os.getenv("EMB_CENTER_SHRINK", str(getattr(E, 'center_shrink', 0.0))))
+    except Exception:
+        E.center_shrink = 0.0
+    try:
+        E.mirror_shrink = float(os.getenv("EMB_MIRROR_SHRINK", str(getattr(E, 'mirror_shrink', 0.08))))
+    except Exception:
+        E.mirror_shrink = 0.08
+
+    # 3뷰 ROI (w,h,dx,dy,hflip) 리스트
+    default_rois3 = [
+        [540, 540, +103, -260, 0],  # center
+        [240, 460, -380, -170, 1],  # left mirror  (hflip)
+        [270, 440, +630, -170, 1],  # right mirror (hflip)
+    ]
+    if not hasattr(E, 'rois3') or not E.rois3:
+        E.rois3 = default_rois3
+    # 타입 정리(문자→정수 캐스팅, 길이 3까지만)
+    try:
+        cleaned = []
+        for item in E.rois3[:3]:
+            w,h,dx,dy,hf = item
+            cleaned.append([int(w), int(h), int(dx), int(dy), int(hf)])
+        if len(cleaned) < 3:
+            # 부족하면 기본으로 채우기
+            cleaned = (cleaned + default_rois3)[:3]
+        E.rois3 = cleaned
+    except Exception:
+        E.rois3 = default_rois3

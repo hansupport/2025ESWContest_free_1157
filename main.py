@@ -1,4 +1,4 @@
-# arduino.py (아두이노 시리얼 + 저속-대기 펌프 + 버스트 플러시 + 방향 최적화)
+# main.py (아두이노 시리얼 + 저속-대기 펌프 + 버스트 플러시 + 방향 최적화)
 # - 웹 자산: web/index.html, web/style.css, web/script.js만 사용 (ui.css/ui.js 완전 제거)
 # - 아두이노 "1\n"=스캔, "2\n"=일시정지 ON, "3\n"=일시정지 OFF
 # - 카메라 상시 켜두고 저속 펌프 → 트리거 시 버스트로 최신 프레임 확보
@@ -7,6 +7,7 @@
 # - DM 없으면 모델 라벨(16자리)에서 타입/치수 파싱 → UI 반영
 # - p < 0.40 → "error(빨간)" / p ≥ 0.40 → "done(초록)"
 # - 상태 램프 순서는 index.html에서 제어(서버는 상태값만 제공)
+# - 환경: Python 3.6 / OpenCV 4.1.1 / PyTorch 1.10 / torchvision 0.11 / CPU-only
 
 import sys
 import time
@@ -247,9 +248,9 @@ def _set_ui_from_label(s):
         tname = _UI_STATE['type_name']
         wl    = info.get("wrap_layers", 1)
 
-    print(f"[ui] LABEL 사용: type_id={info['type_id']}({tname}) "
-          f"W={info['W']} L={info['L']} H={info['H']} mm "
-          f"wrap_layers={wl} → 방향최적화 bubble={bb} mm")
+    print("[ui] LABEL 사용: type_id={}({}) W={} L={} H={} mm wrap_layers={} → 방향최적화 bubble={} mm".format(
+        info['type_id'], tname, info['W'], info['L'], info['H'], wl, bb
+    ))
     return True
 
 # ---- Flask 앱 ----
@@ -284,7 +285,7 @@ if HAVE_FLASK:
     def script_js():
         return send_from_directory(str(WEB_DIR), "script.js")
 
-    # web/ 내 기타 자산(이미지/폰트 등)을 직접 접근 가능하게
+    # web/ 내 기타 자산
     @_APP.route("/web/<path:filename>")
     def serve_web_assets(filename):
         return send_from_directory(str(WEB_DIR), filename)
@@ -354,10 +355,10 @@ def _start_web_ui():
     threads = int(os.getenv("UI_THREADS", "2"))
     def _run():
         if HAVE_WAITRESS:
-            print(f"[ui] Serving with Waitress (threads={threads}) on {host}:{port}")
+            print("[ui] Serving with Waitress (threads={}) on {}:{}".format(threads, host, port))
             _waitress_serve(_APP, host=host, port=port, threads=threads, ident=None)
         else:
-            print(f"[ui] Serving with Flask dev server on {host}:{port}")
+            print("[ui] Serving with Flask dev server on {}:{}".format(host, port))
             kwargs = dict(host=host, port=port, threaded=True, debug=False, use_reloader=False)
             try:
                 if _SilentWSGIRequestHandler is not None:
@@ -367,7 +368,7 @@ def _start_web_ui():
             _APP.run(**kwargs)
     th = threading.Thread(target=_run, daemon=True)
     th.start()
-    print(f"[ui] 웹 UI 실행: http://<Jetson_IP>:{port}  (iPad/Safari 가능)")
+    print("[ui] 웹 UI 실행: http://<Jetson_IP>:{}  (iPad/Safari 가능)".format(port))
 
 def run_training_now(config_path: Optional[Path], force_type: Optional[str]):
     train_py = MODEL_DIR / "model" / "train.py" if (MODEL_DIR / "model" / "train.py").exists() else MODEL_DIR / "train.py"
@@ -404,7 +405,7 @@ def _start_frame_pump(dm_handle, rois, idle_fps: float = 1.0):
     period = 1.0 / float(idle_fps)
 
     def _loop():
-        print(f"[pump] start idle_fps={idle_fps:.2f} (period={period:.3f}s)")
+        print("[pump] start idle_fps={:.2f} (period={:.3f}s)".format(idle_fps, period))
         while _RUN_PUMP:
             if _SCAN_BUSY.is_set():
                 time.sleep(period)
@@ -436,6 +437,63 @@ def _burst_flush(dm_handle, rois, n=10, to_sec=0.001):
     except Exception:
         pass
 
+# =======================
+# 임베딩 모드 래퍼 (3뷰 concat 지원)
+# =======================
+
+def _inject_default_embedding_options(S):
+    # S.embedding 공간 보정
+    if not hasattr(S, 'embedding'):
+        class _E: pass
+        S.embedding = _E()
+
+    # concat3 스위치 (설정 또는 환경변수)
+    if not hasattr(S.embedding, 'concat3'):
+        S.embedding.concat3 = bool(int(os.getenv("EMB_CONCAT3", "0")))
+    # 미러 캐시 주기
+    if not hasattr(S.embedding, 'mirror_period'):
+        S.embedding.mirror_period = int(os.getenv("EMB_MIRROR_PERIOD", "3"))
+    # shrink 비율
+    if not hasattr(S.embedding, 'mirror_shrink'):
+        S.embedding.mirror_shrink = float(os.getenv("EMB_MIRROR_SHRINK", "0.08"))
+    if not hasattr(S.embedding, 'center_shrink'):
+        S.embedding.center_shrink = float(os.getenv("EMB_CENTER_SHRINK", "0.00"))
+
+    # 3뷰 ROI 기본값 (w,h,dx,dy,hflip)
+    default_rois3 = [
+        (540, 540, +103, -260, 0),  # center
+        (240, 460, -380, -170, 1),  # left mirror
+        (270, 440, +630, -170, 1),  # right mirror
+    ]
+    if not hasattr(S.embedding, 'rois3') or not S.embedding.rois3:
+        S.embedding.rois3 = default_rois3
+
+def _embed_one_any(emb, S, dm_handle, pregrab=12):
+    """
+    Emb 안에 concat3용 함수가 구현되어 있으면 사용,
+    아니면 기존 단일뷰 embed_one_frame_shared로 폴백.
+    """
+    # 우선 concat3를 희망하는지 확인
+    want_concat3 = (hasattr(S, 'embedding') and getattr(S.embedding, 'concat3', False))
+    if want_concat3:
+        # core.lite.Emb 안에 구현되어 있는지 동적 탐색
+        # (예: embed_one_frame_shared_concat3(emb, S, dm_handle, dm_lock, pregrab=..., mirror_period=...))
+        if hasattr(Emb, "embed_one_frame_shared_concat3"):
+            try:
+                return Emb.embed_one_frame_shared_concat3(
+                    emb, S, dm_handle, DM.lock(),
+                    pregrab=pregrab,
+                    mirror_period=int(getattr(S.embedding, 'mirror_period', 3)),
+                    mirror_shrink=float(getattr(S.embedding, 'mirror_shrink', 0.08)),
+                    center_shrink=float(getattr(S.embedding, 'center_shrink', 0.0)),
+                    rois3=getattr(S.embedding, 'rois3', None)
+                )
+            except Exception as e:
+                print("[embed] concat3 경로 예외 → 단일뷰 폴백:", e)
+
+    # 폴백: 단일뷰
+    return Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=pregrab)
+
 def main():
     t_all = time.time()
     print("[init] start]")
@@ -465,6 +523,9 @@ def main():
         if not hasattr(S.model, 'topk'):            S.model.topk = 3
         if not hasattr(S.model, 'type'):            S.model.type = "lgbm"
 
+    # 3뷰 옵션 기본 주입(+환경변수)
+    _inject_default_embedding_options(S)
+
     # UI 시작
     _start_web_ui()
 
@@ -475,9 +536,9 @@ def main():
         BAUD_RATE = int(os.getenv("ARDUINO_BAUD", "9600"))
         try:
             ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.01)
-            print(f"[serial] 아두이노 연결 성공: {SERIAL_PORT} (Baud: {BAUD_RATE})")
+            print("[serial] 아두이노 연결 성공: {} (Baud: {})".format(SERIAL_PORT, BAUD_RATE))
         except Exception as e:
-            print(f"[serial] 아두이노 연결 실패: {e}")
+            print("[serial] 아두이노 연결 실패: {}".format(e))
             print("[serial] 키보드 'D' 입력은 계속 사용 가능합니다.")
     else:
         print("[serial] 'pyserial' 미설치 → 아두이노 연동 생략 (pip3 install pyserial)")
@@ -508,7 +569,7 @@ def main():
     )
     depth.start()
     frames = depth.warmup(seconds=1.5)
-    print(f"[warmup] RealSense frames={frames}")
+    print("[warmup] RealSense frames={}".format(frames))
     ok_calib = depth.calibrate(max_seconds=3.0)
     if not ok_calib:
         print("[fatal] depth calib 실패. 바닥만 보이게 하고 재실행하세요.")
@@ -553,11 +614,13 @@ def main():
 
     # 임베더
     if same_device(S.dm.camera, S.embedding.cam_dev):
-        print(f"[warn] DM_CAMERA({S.dm.camera})와 EMB_CAM_DEV({S.embedding.cam_dev}) 동일. shared persistent handle + lock 사용")
+        print("[warn] DM_CAMERA({})와 EMB_CAM_DEV({}) 동일. shared persistent handle + lock 사용".format(S.dm.camera, S.embedding.cam_dev))
     emb = Emb.build_embedder(S)
-    print(f"[img2emb.cfg] dev={S.embedding.cam_dev} {S.embedding.width}x{S.embedding.height}@{S.embedding.fps} pixfmt={S.embedding.pixfmt}")
+    print("[img2emb.cfg] dev={} {}x{}@{} pixfmt={}".format(
+        S.embedding.cam_dev, S.embedding.width, S.embedding.height, S.embedding.fps, S.embedding.pixfmt
+    ))
 
-    # e2e warmup
+    # e2e warmup (임베딩 백엔드 워밍업)
     Emb.warmup_shared(emb, S, dm_handle, DM.lock(), S.embedding.e2e_warmup_frames, S.embedding.e2e_pregrab)
 
     # 프레임 펌프 시작
@@ -571,6 +634,16 @@ def main():
         window=int(getattr(S.model, 'smooth_window', 3)),
         min_votes=int(getattr(S.model, 'smooth_min', 2))
     )
+
+    # 임베딩 모드 안내
+    if getattr(S.embedding, 'concat3', False):
+        print("[embed] 3-view concat 모드 활성: mirror_period={} center_shrink={} mirror_shrink={}".format(
+            int(getattr(S.embedding, 'mirror_period', 3)),
+            float(getattr(S.embedding, 'center_shrink', 0.0)),
+            float(getattr(S.embedding, 'mirror_shrink', 0.08))
+        ))
+    else:
+        print("[embed] 단일뷰 모드")
 
     print("[ready] total init %.2fs" % (time.time()-t_all))
     print("[hint] D + Enter 또는 아두이노 신호 = 측정/스캔/추론")
@@ -653,7 +726,7 @@ def main():
                 DM_TRACE_ID += 1
                 tid = DM_TRACE_ID
                 t_press = t_now()
-                print(f"[D#{tid}][{ts_wall()}] key_down → scan_call")
+                print("[D#{}][{}] key_down → scan_call".format(tid, ts_wall()))
 
                 _set_status("analyzing")
                 _set_prob(None)
@@ -674,14 +747,15 @@ def main():
                     t_s0 = t_now()
                     payload = datamatrix_scan_persistent(None, debug=False, trace_id=tid)
                     t_s1 = t_now()
-                    print(f"[D#{tid}][{ts_wall()}] scan_return elapsed={ms(t_s1 - t_s0)} "
-                          f"Tpress→scan_return={ms(t_s1 - t_press)} payload={'YES' if payload else 'NO'}")
+                    print("[D#{}][{}] scan_return elapsed={} Tpress→scan_return={} payload={}".format(
+                        tid, ts_wall(), ms(t_s1 - t_s0), ms(t_s1 - t_press), "YES" if payload else "NO"
+                    ))
                     if payload:
-                        print(f"[dm] payload={payload}")
+                        print("[dm] payload={}".format(payload))
                     else:
                         print("[dm] payload 없음")
 
-                    # (A) DM 성공 → UI 즉시
+                    # (A) DM 성공 → UI 즉시 업데이트 후 보조 기록만
                     if payload and _set_ui_from_label(payload):
                         _set_warn(None)
                         _set_prob(None)
@@ -691,21 +765,24 @@ def main():
                         t_depth0 = t_now()
                         feat = depth.measure_dimensions(duration_s=1.0, n_frames=10)
                         t_depth1 = t_now()
-                        print(f"[D#{tid}][{ts_wall()}] depth_measure elapsed={ms(t_depth1 - t_depth0)}")
+                        print("[D#{}][{}] depth_measure elapsed={}".format(tid, ts_wall(), ms(t_depth1 - t_depth0)))
                         if feat is None:
                             print("[manual] 측정 실패")
                             _SCAN_BUSY.clear()
                             continue
                         t_emb0 = t_now()
-                        vec = Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=12)
+                        # 여기서 임베딩은 1뷰/3뷰 모드에 따라 자동 선택
+                        vec = _embed_one_any(emb, S, dm_handle, pregrab=12)
                         t_emb1 = t_now()
-                        print(f"[D#{tid}][{ts_wall()}] embed_one_frame elapsed={ms(t_emb1 - t_emb0)}")
+                        print("[D#{}][{}] embed_one_frame elapsed={}".format(tid, ts_wall(), ms(t_emb1 - t_emb0)))
                         if vec is None:
                             print("[manual] 임베딩 실패")
                             _SCAN_BUSY.clear()
                             continue
                         if feat["q"] < float(getattr(S.quality, 'q_warn', 0.30)):
-                            print(f"[notify] 품질 경고: q={feat['q']:.2f} (임계 {float(getattr(S.quality, 'q_warn', 0.30)):.2f})")
+                            print("[notify] 품질 경고: q={:.2f} (임계 {:.2f})".format(
+                                feat['q'], float(getattr(S.quality, 'q_warn', 0.30))
+                            ))
                         Storage.on_sample_record(conn, feat, vec, product_id=payload, has_label=1, origin="manual_dm")
                         smoother.buf.clear()
                         print("[infer] skip: DM 라벨 확정 → 모델 추론 생략")
@@ -718,26 +795,28 @@ def main():
                     t_depth0 = t_now()
                     feat = depth.measure_dimensions(duration_s=1.0, n_frames=10)
                     t_depth1 = t_now()
-                    print(f"[D#{tid}][{ts_wall()}] depth_measure elapsed={ms(t_depth1 - t_depth0)}")
+                    print("[D#{}][{}] depth_measure elapsed={}".format(tid, ts_wall(), ms(t_depth1 - t_depth0)))
                     if feat is None:
                         print("[manual] 측정 실패"); _set_status("error"); _SCAN_BUSY.clear(); continue
 
-                    # 3) 임베딩
+                    # 3) 임베딩 (단일/3뷰 자동)
                     t_emb0 = t_now()
-                    vec = Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=12)
+                    vec = _embed_one_any(emb, S, dm_handle, pregrab=12)
                     t_emb1 = t_now()
-                    print(f"[D#{tid}][{ts_wall()}] embed_one_frame elapsed={ms(t_emb1 - t_emb0)}")
+                    print("[D#{}][{}] embed_one_frame elapsed={}".format(tid, ts_wall(), ms(t_emb1 - t_emb0)))
                     if vec is None:
                         print("[manual] 임베딩 실패"); _set_status("error"); _SCAN_BUSY.clear(); continue
 
                     # 품질 알림
                     if feat["q"] < float(getattr(S.quality, 'q_warn', 0.30)):
-                        print(f"[notify] 품질 경고: q={feat['q']:.2f} (임계 {float(getattr(S.quality, 'q_warn', 0.30)):.2f})")
+                        print("[notify] 품질 경고: q={:.2f} (임계 {:.2f})".format(
+                            feat['q'], float(getattr(S.quality, 'q_warn', 0.30))
+                        ))
 
                     # 4) 저장
                     Storage.on_sample_record(conn, feat, vec, product_id=None, has_label=0, origin="manual_no_dm")
 
-                    # === 벡터 구성(15+128) ===
+                    # === 벡터 구성(15 + D) ===
                     meta = np.array([
                         feat["d1"], feat["d2"], feat["d3"],
                         feat["mad1"], feat["mad2"], feat["mad3"],
@@ -747,15 +826,15 @@ def main():
                     ], np.float32)
                     full_vec = np.concatenate([meta, vec], axis=0)
                     full_vec = l2_normalize(full_vec)
-                    print(f"[vector] dim={full_vec.shape[0]}")
-                    print(f"[debug] ||full_vec||={np.linalg.norm(full_vec):.6f}")
+                    print("[vector] dim={} (meta 15 + emb {})".format(full_vec.shape[0], vec.shape[0]))
+                    print("[debug] ||full_vec||={:.6f}".format(np.linalg.norm(full_vec)))
 
                     # 5) 추론
                     top_lab, top_p, gap, backend = engine.infer(full_vec)
                     if backend is None:
                         print("[infer] 모델 없음(파일 미존재 또는 로드 실패)")
                         _set_prob(None); _set_status("error"); _SCAN_BUSY.clear(); continue
-                    print(f"[infer] {backend} top1: {top_lab} p={top_p:.3f} gap={gap:.4f}")
+                    print("[infer] {} top1: {} p={:.3f} gap={:.4f}".format(backend, top_lab, top_p, gap))
                     _set_prob(top_p)
 
                     # ---- UI 갱신 + p 임계 기반 상태/경고 ----
@@ -777,30 +856,37 @@ def main():
                     min_margin = float(getattr(S.model, 'min_margin', 0.05))
                     if gap < min_margin:
                         smoother.push(top_lab, top_p)
-                        print(f"[smooth] hold: small_margin gap={gap:.4f} (<{min_margin:.3f}), len={len(smoother.buf)}/{S.model.smooth_window}, top={top_lab} p={top_p:.2f}")
+                        print("[smooth] hold: small_margin gap={:.4f} (<{:.3f}), len={}/{}, top={} p={:.2f}".format(
+                            gap, min_margin, len(smoother.buf), S.model.smooth_window, top_lab, top_p
+                        ))
                         decided = smoother.maybe_decide(threshold=prob_th)
                         if decided is not None:
                             lab, avgp = decided
-                            print(f"[decision] smoothed: {lab} p={avgp:.2f}")
+                            print("[decision] smoothed: {} p={:.2f}".format(lab, avgp))
                     elif low_prob:
                         smoother.push(top_lab, top_p)
-                        print(f"[smooth] hold: len={len(smoother.buf)}/{S.model.smooth_window}, top={top_lab} p={top_p:.2f} (<{prob_th:.2f})")
+                        print("[smooth] hold: len={}/{} , top={} p={:.2f} (<{:.2f})".format(
+                            len(smoother.buf), S.model.smooth_window, top_lab, top_p, prob_th
+                        ))
                         decided = smoother.maybe_decide(threshold=prob_th)
                         if decided is not None:
                             lab, avgp = decided
-                            print(f"[decision] smoothed: {lab} p={avgp:.2f}")
+                            print("[decision] smoothed: {} p={:.2f}".format(lab, avgp))
                     else:
                         smoother.push(top_lab, top_p)
                         decided = smoother.maybe_decide(threshold=prob_th)
                         if decided is None:
-                            lab, votes, avgp = smoother.status()
-                            if lab is None:
-                                print(f"[smooth] hold: len={len(smoother.buf)}/{S.model.smooth_window}")
+                            status = smoother.status()
+                            if status[0] is None:
+                                print("[smooth] hold: len={}/{}".format(len(smoother.buf), S.model.smooth_window))
                             else:
-                                print(f"[smooth] hold: len={len(smoother.buf)}/{S.model.smooth_window}, lead={lab} votes={votes} avgp={avgp:.2f}")
+                                lab, votes, avgp = status
+                                print("[smooth] hold: len={}/{} , lead={} votes={} avgp={:.2f}".format(
+                                    len(smoother.buf), S.model.smooth_window, lab, votes, avgp
+                                ))
                         else:
                             lab, avgp = decided
-                            print(f"[decision] smoothed: {lab} p={avgp:.2f}")
+                            print("[decision] smoothed: {} p={:.2f}".format(lab, avgp))
 
                 except Exception as e:
                     print("[error] D 처리 중 예외:", e)

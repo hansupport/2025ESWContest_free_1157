@@ -9,10 +9,10 @@ embedding:
   input_size: 128
   out_dim: 128
   width_scale: 0.35
-  fp16: false          # ONNX CPU → 비활성화
-  use_depthwise: false # ← 학습 기본값을 썼다면 false
-  use_bn: false        # ← 학습 기본값을 썼다면 false
-  pinned: false        # ONNX 경로에선 의미 거의 없음(무시 가능)
+  fp16: false
+  use_depthwise: false
+  use_bn: false
+  pinned: false
 
   # img2emb 전용 ROI (center-based, w,h / dx,dy)
   roi_px: [530, 530]
@@ -25,12 +25,23 @@ embedding:
   e2e_warmup_frames: 12
   e2e_pregrab: 2
 
+  # ===== 새로 추가: 3뷰 concat 임베딩 =====
+  concat3: 1              # 3뷰 사용(0=off, 1=on)
+  mirror_period: 3        # 좌/우 캡처 전 추가 grab 수(최신 프레임 확보)
+  center_shrink: 0.00     # 중앙 ROI 내부 테두리 제거 비율(0.0~0.4 권장)
+  mirror_shrink: 0.00     # 거울 ROI 내부 테두리 제거 비율(배경 노이즈 감소)
+  # rois3: [w, h, dx, dy, hflip]  (center, left-mirror, right-mirror)
+  rois3:
+    - [520, 550,   90, -160, 0]   # center (hflip off)
+    - [270, 470, -450, -160, 1]   # left mirror  (hflip on)
+    - [260, 460,  670, -170, 1]   # right mirror (hflip on)
+
 depth:
   width: 1280
   height: 720
   fps: 6
-  roi_px: [250, 260]
-  roi_offset: [15, -80]
+  roi_px: [260, 270]
+  roi_offset: [12, -90]
   DECIM: 1
   PLANE_TAU: 0.004
   H_MIN_BASE: 0.003
@@ -60,8 +71,8 @@ datamatrix:
       offset: [660, -140]
       hflip: true
     - name: ROI_MAIN
-      size: [530, 530]
-      offset: [90, -130]
+      size: [520, 550]
+      offset: [90, -160]
       hflip: false
 
 quality:
@@ -71,12 +82,16 @@ storage:
   sqlite_path: "pack.db"
 
 model:
-  # 사용 우선순위: "lgbm" | "centroid"
-  # (LGBM 모델 파일이 있을 경우 "lgbm" 권장)
-  type: "lgbm"
+  type: "lgbm"                # "lgbm" | "centroid"
   centroids_path: "centroids.npz"
   lgbm_path: "lgbm.pkl"
   topk: 3
+  # (옵션) 필요시 아래도 지정 가능
+  # top1_threshold: 0.40
+  # smooth_window: 3
+  # smooth_min_votes: 2
+  # min_margin: 0.02
+  # centroid_margin_scale: 1500.0
 
 lgbm:
   n_estimators: 200

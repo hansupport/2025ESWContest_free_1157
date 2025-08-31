@@ -1,7 +1,7 @@
 # core/lite.py
 import threading, time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import numpy as np
 import cv2
 
@@ -277,6 +277,199 @@ class Emb:
         except Exception as e:
             print("[embed] separate device error:", e)
             return None
+
+    # ==============================
+    # 3-View Concat 임베딩 (center + mirror L/R)
+    # ==============================
+    @staticmethod
+    def _crop_center_roi(img: np.ndarray, rw: int, rh: int, dx: int, dy: int,
+                         hflip: bool=False, shrink: float=0.0) -> np.ndarray:
+        """
+        이미지 중심 기준 (rw,rh), (dx,dy) 오프셋 ROI 크롭.
+        hflip=True면 좌우반전 보정.
+        shrink>0이면 ROI 내부를 shrink 비율만큼 가장자리 잘라 중심 재크롭.
+        """
+        H, W = img.shape[:2]
+        rw = max(1, min(int(rw), W))
+        rh = max(1, min(int(rh), H))
+        cx = W // 2 + int(dx)
+        cy = H // 2 + int(dy)
+        x = max(0, min(W - rw, cx - rw // 2))
+        y = max(0, min(H - rh, cy - rh // 2))
+        roi = img[y:y+rh, x:x+rw]
+        if roi.size == 0:
+            return roi
+        if hflip:
+            roi = cv2.flip(roi, 1)
+        if shrink and (shrink > 1e-6):
+            h, w = roi.shape[:2]
+            sw = int(max(0, min(w//2 - 1, round(w * shrink * 0.5))))
+            sh = int(max(0, min(h//2 - 1, round(h * shrink * 0.5))))
+            if sw > 0 or sh > 0:
+                roi = roi[sh:h-sh, sw:w-sw] if (h - 2*sh > 1 and w - 2*sw > 1) else roi
+        return roi
+
+    @staticmethod
+    def _embed_views_from_frame(emb, frame_bgr: np.ndarray,
+                                rois3: List[Tuple[int,int,int,int,int]],
+                                center_shrink: float, mirror_shrink: float) -> Optional[np.ndarray]:
+        """
+        단일 프레임에서 3뷰 ROI 크롭 및 임베딩 후 concat.
+        rois3: [(w,h,dx,dy,hflip), ...] 길이 3 권장 (center, left, right)
+        """
+        if frame_bgr is None or frame_bgr.size == 0:
+            return None
+        # 안전한 길이 체크
+        if not rois3 or len(rois3) < 3:
+            # 기본 ROI
+            rois3 = [
+                (540, 540, +103, -260, 0),  # center
+                (240, 460, -380, -170, 1),  # left mirror
+                (270, 440, +630, -170, 1),  # right mirror
+            ]
+        out_vecs = []
+        for i, (w,h,dx,dy,hf) in enumerate(rois3[:3]):
+            shrink = center_shrink if i == 0 else mirror_shrink
+            roi = Emb._crop_center_roi(frame_bgr, int(w), int(h), int(dx), int(dy), bool(hf), float(shrink))
+            if roi is None or roi.size == 0:
+                continue
+            v = emb.embed_bgr(roi)
+            if v is None:  # 방어
+                continue
+            out_vecs.append(v.astype(np.float32))
+        if not out_vecs:
+            return None
+        vcat = np.concatenate(out_vecs, axis=0).astype(np.float32)
+        return l2_normalize(vcat)
+
+    @staticmethod
+    def embed_one_frame_shared_concat3(emb, S, dm_handle, lock,
+                                       pregrab: int=12,
+                                       mirror_period: int=3,
+                                       mirror_shrink: float=0.08,
+                                       center_shrink: float=0.0,
+                                       rois3: Optional[List[Tuple[int,int,int,int,int]]]=None) -> Optional[np.ndarray]:
+        """
+        퍼시스턴트 카메라(shared) 또는 별도 카메라에서
+        [center, mirrorL, mirrorR] 3뷰 임베딩을 concat하여 반환.
+        - pregrab: 시작 전 프레임 비우기
+        - mirror_period: 좌/우 뷰 캡쳐 전 추가 프레임 횟수(최신화)
+        - *_shrink: ROI 내부 가장자리 제거 비율 (0~0.4 권장)
+        """
+        # default rois3
+        if (not rois3) or len(rois3) < 3:
+            rois3 = [
+                (540, 540, +103, -260, 0),  # center
+                (240, 460, -380, -170, 1),  # left mirror
+                (270, 440, +630, -170, 1),  # right mirror
+            ]
+
+        # === shared (DM persistent) 경로 ===
+        if same_device(S.dm.camera, S.embedding.cam_dev) and (dm_handle is not None):
+            try:
+                from datamatrix import read_frame_nonblocking as dm_read
+            except Exception as e:
+                print("[embed.concat3] datamatrix import 실패:", e)
+                return None
+            try:
+                frames = [None, None, None]  # center, left, right
+                with lock:
+                    # flush
+                    for _ in range(max(0, pregrab)):
+                        _ = dm_read(dm_handle[1].cap)
+
+                    # center capture
+                    frames[0] = dm_read(dm_handle[1].cap)
+
+                    # left capture after mirror_period grabs
+                    for _ in range(max(0, mirror_period)):
+                        _ = dm_read(dm_handle[1].cap)
+                    frames[1] = dm_read(dm_handle[1].cap)
+
+                    # right capture after mirror_period grabs
+                    for _ in range(max(0, mirror_period)):
+                        _ = dm_read(dm_handle[1].cap)
+                    frames[2] = dm_read(dm_handle[1].cap)
+
+                # 각 프레임에서 해당 ROI의 임베딩 추출
+                vecs = []
+                # center
+                if frames[0] is not None:
+                    v0 = Emb._embed_views_from_frame(emb, frames[0],
+                                                     [rois3[0]], center_shrink, mirror_shrink)
+                    if v0 is not None and v0.size > 0:
+                        vecs.append(v0.astype(np.float32))
+                # left
+                if frames[1] is not None:
+                    v1 = Emb._embed_views_from_frame(emb, frames[1],
+                                                     [rois3[1]], center_shrink, mirror_shrink)
+                    if v1 is not None and v1.size > 0:
+                        vecs.append(v1.astype(np.float32))
+                # right
+                if frames[2] is not None:
+                    v2 = Emb._embed_views_from_frame(emb, frames[2],
+                                                     [rois3[2]], center_shrink, mirror_shrink)
+                    if v2 is not None and v2.size > 0:
+                        vecs.append(v2.astype(np.float32))
+
+                if not vecs:
+                    return None
+                vcat = np.concatenate(vecs, axis=0).astype(np.float32)
+                return l2_normalize(vcat)
+            except Exception as e:
+                print("[embed.concat3] shared path error:", e)
+                return None
+
+        # === separate device 경로 ===
+        try:
+            cap = Emb._open_camera(S.embedding.cam_dev, w=S.embedding.width, h=S.embedding.height,
+                                   fps=S.embedding.fps, pixfmt=S.embedding.pixfmt or "YUYV")
+        except Exception as e:
+            print("[embed.concat3] separate device open error:", e)
+            return None
+
+        try:
+            # flush
+            for _ in range(max(0, pregrab)):
+                cap.grab()
+
+            vecs = []
+
+            # center
+            ok, fr = cap.read()
+            if ok:
+                v0 = Emb._embed_views_from_frame(emb, fr, [rois3[0]], center_shrink, mirror_shrink)
+                if v0 is not None and v0.size > 0:
+                    vecs.append(v0.astype(np.float32))
+
+            # left
+            for _ in range(max(0, mirror_period)): cap.grab()
+            ok, fr = cap.read()
+            if ok:
+                v1 = Emb._embed_views_from_frame(emb, fr, [rois3[1]], center_shrink, mirror_shrink)
+                if v1 is not None and v1.size > 0:
+                    vecs.append(v1.astype(np.float32))
+
+            # right
+            for _ in range(max(0, mirror_period)): cap.grab()
+            ok, fr = cap.read()
+            if ok:
+                v2 = Emb._embed_views_from_frame(emb, fr, [rois3[2]], center_shrink, mirror_shrink)
+                if v2 is not None and v2.size > 0:
+                    vecs.append(v2.astype(np.float32))
+
+            if not vecs:
+                return None
+            vcat = np.concatenate(vecs, axis=0).astype(np.float32)
+            return l2_normalize(vcat)
+        except Exception as e:
+            print("[embed.concat3] separate device error:", e)
+            return None
+        finally:
+            try:
+                cap.release()
+            except Exception:
+                pass
 
 # ======== 모델/스토리지 ========
 class Storage:
