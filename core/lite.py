@@ -45,6 +45,7 @@ class DM:
         return DM._persist
 
     @staticmethod
+    
     def close_persistent():
         if DM._persist is None:
             return

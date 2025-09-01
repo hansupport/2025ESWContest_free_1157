@@ -1,13 +1,4 @@
-# main.py (아두이노 시리얼 + 저속-대기 펌프 + 버스트 플러시 + 방향 최적화)
-# - 웹 자산: web/index.html, web/style.css, web/script.js만 사용 (ui.css/ui.js 완전 제거)
-# - 아두이노 "1\n"=스캔, "2\n"=일시정지 ON, "3\n"=일시정지 OFF
-# - 카메라 상시 켜두고 저속 펌프 → 트리거 시 버스트로 최신 프레임 확보
-# - 라벨 16자리 마지막(s[15])=wrap_layers
-# - 방향 최적화: 롤폭(기본 200mm)으로 덮는 축 선택, bands=ceil(덮는축/롤폭)
-# - DM 없으면 모델 라벨(16자리)에서 타입/치수 파싱 → UI 반영
-# - p < 0.40 → "error(빨간)" / p ≥ 0.40 → "done(초록)"
-# - 상태 램프 순서는 index.html에서 제어(서버는 상태값만 제공)
-# - 환경: Python 3.6 / OpenCV 4.1.1 / PyTorch 1.10 / torchvision 0.11 / CPU-only
+# main.py — DM 퍼시스턴트 핸들에서 스냅샷 캡처(동일 디바이스 busy 해결) + 메모리 서빙 + 캡처 이미지 UI 전달
 
 import sys
 import time
@@ -51,7 +42,7 @@ if str(MODEL_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_DIR))
 
 # ★ 웹 자산 디렉터리(고정)
-WEB_DIR = ROOT / "web"   # web/index.html, web/style.css, web/script.js
+WEB_DIR = ROOT / "web"  # web/index.html, web/style.css, web/script.js
 
 # ---- 뽁뽁이 롤 폭(mm) ----
 ROLL_WIDTH_MM = int(os.getenv("BUBBLE_ROLL_WIDTH_MM", "200"))
@@ -59,14 +50,25 @@ ROLL_WIDTH_MM = int(os.getenv("BUBBLE_ROLL_WIDTH_MM", "200"))
 # ---- 로컬 모듈 ----
 from depth import DepthEstimator
 import depth as depthmod
-
 from core.config import load_config, get_settings, apply_depth_overrides
 from core.lite import DM, Emb, Models, Storage
 from core.utils import (
-    ts_wall, t_now, ms, stdin_readline_nonblock,
-    maybe_run_jetson_perf, warmup_opencv_kernels,
-    l2_normalize, same_device
+    ts_wall,
+    t_now,
+    ms,
+    stdin_readline_nonblock,
+    maybe_run_jetson_perf,
+    warmup_opencv_kernels,
+    l2_normalize,
+    same_device,
 )
+
+# ---- DM 프레임 읽기(퍼시스턴트 핸들에서) ----
+try:
+    # 이 함수는 cam(카메라 객체)을 인자로 받음
+    from datamatrix import read_frame_nonblocking as dm_read_frame
+except Exception:
+    dm_read_frame = None  # 폴백 경로만 사용
 
 np.set_printoptions(suppress=True, linewidth=200, threshold=50, precision=4)
 
@@ -77,6 +79,7 @@ TYPE_MAP = {
     "000003": "투명 플라스틱 용기",
     "000004": "나무 통통통 사후르",
 }
+
 def type_name_from_id(tid: str) -> Optional[str]:
     if not tid:
         return None
@@ -87,19 +90,34 @@ _UI_LOCK = threading.Lock()
 _UI_STATE = {
     "type_id": None,
     "type_name": None,
-    "W": None, "L": None, "H": None,      # mm
+    "W": None,
+    "L": None,
+    "H": None,  # mm
     "bubble_mm": None,
-    "p": None,                             # top-1 prob
-    "status": None,                        # "analyzing" | "done" | "paused" | "error" | None
+    "p": None,  # top-1 prob
+    "status": None,  # "analyzing" | "done" | "paused" | "error" | None
     "updated_ts": None,
-    "warn_msg": None,                      # p<0.40 경고
+    "warn_msg": None,  # p<0.55 경고
     "params": {
         "layers": 2,
         "overlap_mm": 120,
         "slack_ratio": 0.03,
-        "round_to_mm": 10
-    }
+        "round_to_mm": 10,
+    },
+    # === 추가 ===
+    "cap_image": None,   # 캡처 표시 마커: "__mem__" 또는 파일명
+    "event_id": None,    # 스캔 이벤트 ID(히스토리 dedupe)
 }
+
+# 최신 캡처 JPEG 바이트 (메모리 서빙)
+_CAP_JPEG: Optional[bytes] = None
+
+def _set_cap_jpeg(jpeg_bytes: Optional[bytes]):
+    global _CAP_JPEG
+    with _UI_LOCK:
+        _CAP_JPEG = jpeg_bytes
+        _UI_STATE["cap_image"] = "__mem__" if jpeg_bytes else None
+        _UI_STATE["updated_ts"] = int(time.time())
 
 def _round_up(x, base):
     if base <= 0:
@@ -136,40 +154,41 @@ def _set_status(s: Optional[str], touch=True):
         if touch:
             _UI_STATE["updated_ts"] = int(time.time())
 
+def _set_event_id(eid: int):
+    with _UI_LOCK:
+        _UI_STATE["event_id"] = int(eid)
+        _UI_STATE["updated_ts"] = int(time.time())
+
+def _set_cap_image(fname: Optional[str]):
+    # "__mem__" 마커 또는 파일명 또는 None
+    with _UI_LOCK:
+        _UI_STATE["cap_image"] = fname if fname else None
+        _UI_STATE["updated_ts"] = int(time.time())
+
 # ---- 기본 계산식(라벨 없음) : 방향 최적화 ----
-def compute_bubble_length_mm(W, L, H,
-                             layers=None, overlap_mm=None,
-                             slack_ratio=None, round_to_mm=None,
-                             roll_width_mm: Optional[int] = None):
-    """
-    세 방향(W,L,H) 중 하나를 롤폭으로 덮는다고 가정하고,
-    bands = ceil(덮는축 / 롤폭), 한 바퀴 둘레 = 2*(나머지 두 변의 합)
-    총길이 = 둘레 * layers * bands + overlap
-    이후 slack 적용, round_to_mm로 올림 → 최솟값 선택
-    """
+def compute_bubble_length_mm(
+    W, L, H, layers=None, overlap_mm=None, slack_ratio=None, round_to_mm=None, roll_width_mm: Optional[int] = None,
+):
     with _UI_LOCK:
         p = _UI_STATE["params"].copy()
-
-    layers      = p["layers"]      if layers      is None else layers
-    overlap_mm  = p["overlap_mm"]  if overlap_mm  is None else overlap_mm
-    slack_ratio = p["slack_ratio"] if slack_ratio is None else slack_ratio
-    round_to_mm = p["round_to_mm"] if round_to_mm is None else round_to_mm
-    roll_width  = ROLL_WIDTH_MM if roll_width_mm is None else int(roll_width_mm)
+        layers = p["layers"] if layers is None else layers
+        overlap_mm = p["overlap_mm"] if overlap_mm is None else overlap_mm
+        slack_ratio = p["slack_ratio"] if slack_ratio is None else slack_ratio
+        round_to_mm = p["round_to_mm"] if round_to_mm is None else round_to_mm
+    roll_width = ROLL_WIDTH_MM if roll_width_mm is None else int(roll_width_mm)
 
     dims = [float(W), float(L), float(H)]
     best = None
-
     for i in range(3):
-        axis  = dims[i]
+        axis = dims[i]
         other = [dims[j] for j in range(3) if j != i]
         bands = max(1, int(math.ceil(axis / float(roll_width))))
         perim = 2.0 * (other[0] + other[1])
-        base  = perim * float(layers) * bands + float(overlap_mm)
+        base = perim * float(layers) * bands + float(overlap_mm)
         total = base * (1.0 + float(slack_ratio))
         total = _round_up(total, round_to_mm)
         if best is None or total < best:
             best = total
-
     return int(best)
 
 def _set_ui_dims_and_bubble(w_mm, l_mm, h_mm):
@@ -183,9 +202,7 @@ def _set_ui_dims_and_bubble(w_mm, l_mm, h_mm):
 
 # ---- 16자리 라벨 파싱 ----
 def parse_dm_label_16(s):
-    """
-    [0:6]=type_id, [6:9]=W, [9:12]=L, [12:15]=H, [15]=wrap_layers
-    """
+    """[0:6]=type_id, [6:9]=W, [9:12]=L, [12:15]=H, [15]=wrap_layers"""
     if s is None:
         return None
     s = str(s).strip()
@@ -193,17 +210,16 @@ def parse_dm_label_16(s):
         return None
     try:
         return {
-            "type_id":     s[0:6],
-            "W":           int(s[6:9]),
-            "L":           int(s[9:12]),
-            "H":           int(s[12:15]),
+            "type_id": s[0:6],
+            "W": int(s[6:9]),
+            "L": int(s[9:12]),
+            "H": int(s[12:15]),
             "wrap_layers": int(s[15]),
-            "raw":         s,
+            "raw": s,
         }
     except Exception:
         return None
 
-# ---- 라벨용 계산(오버랩/슬랙 없음) : 방향 최적화 ----
 def compute_bubble_length_perimeter_layers_oriented(W, L, H, layers, roll_width_mm: Optional[int] = None):
     roll_width = ROLL_WIDTH_MM if roll_width_mm is None else int(roll_width_mm)
     try:
@@ -212,12 +228,10 @@ def compute_bubble_length_perimeter_layers_oriented(W, L, H, layers, roll_width_
         layers = 1
     if layers < 1:
         layers = 1
-
     dims = [float(W), float(L), float(H)]
     best = None
-
     for i in range(3):
-        axis  = dims[i]
+        axis = dims[i]
         other = [dims[j] for j in range(3) if j != i]
         bands = max(1, int(math.ceil(axis / float(roll_width))))
         perim = 2.0 * (other[0] + other[1])
@@ -225,7 +239,6 @@ def compute_bubble_length_perimeter_layers_oriented(W, L, H, layers, roll_width_
         total = int(round(total))
         if best is None or total < best:
             best = total
-
     return int(best)
 
 def _set_ui_from_label(s):
@@ -233,7 +246,6 @@ def _set_ui_from_label(s):
     if info is None:
         return False
     _set_ui_type(info["type_id"])
-
     bubble_mm = compute_bubble_length_perimeter_layers_oriented(
         info["W"], info["L"], info["H"], info.get("wrap_layers", 1)
     )
@@ -243,14 +255,10 @@ def _set_ui_from_label(s):
         _UI_STATE["H"] = int(info["H"])
         _UI_STATE["bubble_mm"] = int(bubble_mm)
         _UI_STATE["updated_ts"] = int(time.time())
-
-        bb    = _UI_STATE['bubble_mm']
-        tname = _UI_STATE['type_name']
-        wl    = info.get("wrap_layers", 1)
-
-    print("[ui] LABEL 사용: type_id={}({}) W={} L={} H={} mm wrap_layers={} → 방향최적화 bubble={} mm".format(
-        info['type_id'], tname, info['W'], info['L'], info['H'], wl, bb
-    ))
+    bb = _UI_STATE["bubble_mm"]
+    tname = _UI_STATE["type_name"]
+    wl = info.get("wrap_layers", 1)
+    print(f"[ui] LABEL 사용: type_id={info['type_id']}({tname}) W={info['W']} L={info['L']} H={info['H']} mm wrap_layers={wl} → 방향최적화 bubble={bb} mm")
     return True
 
 # ---- Flask 앱 ----
@@ -264,31 +272,28 @@ if HAVE_FLASK:
     try:
         from werkzeug.serving import WSGIRequestHandler
         class _SilentWSGIRequestHandler(WSGIRequestHandler):
-            def log(self, *args, **kwargs):
-                pass
+            def log(self, *args, **kwargs): pass
     except Exception:
         _SilentWSGIRequestHandler = None
 
     _APP = Flask(__name__)
     IMG_DIR = ROOT / "imgfile"
+    try:
+        IMG_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
 
-    # === 웹 자산: web/ 폴더만 ===
     @_APP.route("/")
-    def home():
-        return send_from_directory(str(WEB_DIR), "index.html")
+    def home(): return send_from_directory(str(WEB_DIR), "index.html")
 
     @_APP.route("/style.css")
-    def style_css():
-        return send_from_directory(str(WEB_DIR), "style.css")
+    def style_css(): return send_from_directory(str(WEB_DIR), "style.css")
 
     @_APP.route("/script.js")
-    def script_js():
-        return send_from_directory(str(WEB_DIR), "script.js")
+    def script_js(): return send_from_directory(str(WEB_DIR), "script.js")
 
-    # web/ 내 기타 자산
     @_APP.route("/web/<path:filename>")
-    def serve_web_assets(filename):
-        return send_from_directory(str(WEB_DIR), filename)
+    def serve_web_assets(filename): return send_from_directory(str(WEB_DIR), filename)
 
     @_APP.route("/api/state")
     def api_state():
@@ -317,6 +322,7 @@ if HAVE_FLASK:
                 return float(x)
             except Exception:
                 return default
+
         def _to_int(x, default=None):
             try:
                 if x is None: return default
@@ -330,14 +336,13 @@ if HAVE_FLASK:
             O = _to_int(data.get("overlap_mm"), p["overlap_mm"])
             S_ = _to_float(data.get("slack_ratio"), p["slack_ratio"])
             R = _to_int(data.get("round_to_mm"), p["round_to_mm"])
-            p.update({"layers":L, "overlap_mm":O, "slack_ratio":S_, "round_to_mm":R})
+            p.update({"layers": L, "overlap_mm": O, "slack_ratio": S_, "round_to_mm": R})
             res = {"ok": True, "params": p}
         _touch_ts()
         return jsonify(res)
 
     @_APP.route("/healthz")
-    def healthz():
-        return jsonify(ok=True, ts=int(time.time()))
+    def healthz(): return jsonify(ok=True, ts=int(time.time()))
 
     @_APP.route("/imgfile/<path:filename>")
     def serve_imgfile(filename):
@@ -345,6 +350,20 @@ if HAVE_FLASK:
             return send_from_directory(str(IMG_DIR), filename)
         except Exception:
             return ("", 404)
+
+    @_APP.route("/api/capture.jpg")
+    def api_capture_jpeg():
+        # 최신 캡처 JPEG을 메모리에서 그대로 반환
+        with _UI_LOCK:
+            data = _CAP_JPEG
+        if not data:
+            return ("", 404)
+        resp = make_response(data)
+        resp.mimetype = "image/jpeg"
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
 
 def _start_web_ui():
     if not HAVE_FLASK:
@@ -355,10 +374,10 @@ def _start_web_ui():
     threads = int(os.getenv("UI_THREADS", "2"))
     def _run():
         if HAVE_WAITRESS:
-            print("[ui] Serving with Waitress (threads={}) on {}:{}".format(threads, host, port))
+            print(f"[ui] Serving with Waitress (threads={threads}) on {host}:{port}")
             _waitress_serve(_APP, host=host, port=port, threads=threads, ident=None)
         else:
-            print("[ui] Serving with Flask dev server on {}:{}".format(host, port))
+            print(f"[ui] Serving with Flask dev server on {host}:{port}")
             kwargs = dict(host=host, port=port, threaded=True, debug=False, use_reloader=False)
             try:
                 if _SilentWSGIRequestHandler is not None:
@@ -368,15 +387,13 @@ def _start_web_ui():
             _APP.run(**kwargs)
     th = threading.Thread(target=_run, daemon=True)
     th.start()
-    print("[ui] 웹 UI 실행: http://<Jetson_IP>:{}  (iPad/Safari 가능)".format(port))
+    print(f"[ui] 웹 UI 실행: http://<Jetson_IP>:{port} (iPad/Safari 가능)")
 
 def run_training_now(config_path: Optional[Path], force_type: Optional[str]):
-    train_py = MODEL_DIR / "model" / "train.py" if (MODEL_DIR / "model" / "train.py").exists() else MODEL_DIR / "train.py"
+    train_py = (MODEL_DIR / "model" / "train.py" if (MODEL_DIR / "model" / "train.py").exists() else MODEL_DIR / "train.py")
     args = [sys.executable, str(train_py)]
-    if config_path is not None:
-        args += ["--config", str(config_path)]
-    if force_type in ("lgbm", "centroid"):
-        args += ["--type", force_type]
+    if config_path is not None: args += ["--config", str(config_path)]
+    if force_type in ("lgbm", "centroid"): args += ["--type", force_type]
     print("[train] 시작:", " ".join(args))
     try:
         r = subprocess.run(args, check=False)
@@ -387,7 +404,6 @@ def run_training_now(config_path: Optional[Path], force_type: Optional[str]):
 # =======================
 # 프레임 펌프 / 버스트 플러시
 # =======================
-
 _RUN_PUMP = False
 _PUMP_THREAD = None
 _SCAN_BUSY = threading.Event()
@@ -395,28 +411,22 @@ _SCAN_BUSY = threading.Event()
 def _start_frame_pump(dm_handle, rois, idle_fps: float = 1.0):
     global _RUN_PUMP, _PUMP_THREAD
     if dm_handle is None:
-        print("[pump] dm_handle 없음 → 펌프 미사용")
-        return
+        print("[pump] dm_handle 없음 → 펌프 미사용"); return
     if idle_fps <= 0:
-        print("[pump] idle_fps<=0 → 펌프 비활성화")
-        return
-
+        print("[pump] idle_fps<=0 → 펌프 비활성화"); return
     _RUN_PUMP = True
     period = 1.0 / float(idle_fps)
-
     def _loop():
-        print("[pump] start idle_fps={:.2f} (period={:.3f}s)".format(idle_fps, period))
+        print(f"[pump] start idle_fps={idle_fps:.2f} (period={period:.3f}s)")
         while _RUN_PUMP:
             if _SCAN_BUSY.is_set():
-                time.sleep(period)
-                continue
+                time.sleep(period); continue
             try:
                 DM.scan_fast4(dm_handle, rois, 0.005, debug=False, trace_id=None)
             except Exception:
                 pass
             time.sleep(period)
         print("[pump] stopped")
-
     _PUMP_THREAD = threading.Thread(target=_loop, daemon=True)
     _PUMP_THREAD.start()
 
@@ -424,10 +434,8 @@ def _stop_frame_pump():
     global _RUN_PUMP, _PUMP_THREAD
     _RUN_PUMP = False
     if _PUMP_THREAD is not None:
-        try:
-            _PUMP_THREAD.join(timeout=1.0)
-        except Exception:
-            pass
+        try: _PUMP_THREAD.join(timeout=1.0)
+        except Exception: pass
         _PUMP_THREAD = None
 
 def _burst_flush(dm_handle, rois, n=10, to_sec=0.001):
@@ -438,112 +446,258 @@ def _burst_flush(dm_handle, rois, n=10, to_sec=0.001):
         pass
 
 # =======================
-# 임베딩 모드 래퍼 (3뷰 concat 지원; pregrab 최소화)
+# 임베딩 모드 래퍼
 # =======================
-
 def _inject_default_embedding_options(S):
-    # 옵션 존재 보정(값은 Emb 구현이 처리)
-    if not hasattr(S, 'embedding'):
+    if not hasattr(S, "embedding"):
         class _E: pass
         S.embedding = _E()
-    if not hasattr(S.embedding, 'concat3'):
+    if not hasattr(S.embedding, "concat3"):
         S.embedding.concat3 = bool(int(os.getenv("EMB_CONCAT3", "0")))
-    if not hasattr(S.embedding, 'mirror_period'):
+    if not hasattr(S.embedding, "mirror_period"):
         S.embedding.mirror_period = int(os.getenv("EMB_MIRROR_PERIOD", "3"))
-    if not hasattr(S.embedding, 'rois3'):
-        S.embedding.rois3 = None  # Emb 내부 기본 또는 dm.rois 활용
+    if not hasattr(S.embedding, "rois3"):
+        S.embedding.rois3 = None
 
 def _embed_one_any(emb, S, dm_handle, pregrab=0):
-    """
-    Emb에 concat3 경로가 있으면 사용, 없으면 단일뷰로 폴백.
-    pregrab은 CPU-only에선 0 권장(프레임 대기 제거).
-    """
-    want_concat3 = bool(getattr(S.embedding, 'concat3', False))
+    want_concat3 = bool(getattr(S.embedding, "concat3", False))
     if want_concat3 and hasattr(Emb, "embed_one_frame_shared_concat3"):
         try:
             return Emb.embed_one_frame_shared_concat3(
-                emb, S, dm_handle, DM.lock(),
-                pregrab=int(pregrab),
-                mirror_period=int(getattr(S.embedding, 'mirror_period', 3)),
-                rois3=getattr(S.embedding, 'rois3', None)
+                emb, S, dm_handle, DM.lock(), pregrab=int(pregrab),
+                mirror_period=int(getattr(S.embedding, "mirror_period", 3)),
+                rois3=getattr(S.embedding, "rois3", None),
             )
         except Exception as e:
             print("[embed] concat3 경로 예외 → 단일뷰 폴백:", e)
     return Emb.embed_one_frame_shared(emb, S, dm_handle, DM.lock(), pregrab=int(pregrab))
 
+def _extract_vcap_from_dm_handle(dm_handle):
+    """
+    DM.open_persistent(...)가 준 핸들에서 OpenCV VideoCapture 객체(vcap)를 찾아 리턴.
+    우선순위: 항목들(튜플/리스트) 순회 → attr 탐색(cap, vcap, cam, camera)
+    못 찾으면 None.
+    """
+    # 1) 튜플/리스트 형태면 각 요소를 검사
+    if isinstance(dm_handle, (list, tuple)):
+        for item in dm_handle:
+            # item.cap 형태
+            for attr in ("cap", "vcap"):
+                if hasattr(item, attr):
+                    vcap = getattr(item, attr)
+                    if vcap is not None:
+                        return vcap
+            # item 자체가 cap처럼 동작 (read/grab이 있으면)
+            if hasattr(item, "read") or hasattr(item, "grab"):
+                return item
+
+            # item.camera/cam 내부에 cap이 있는 형태
+            for holder in ("camera", "cam"):
+                if hasattr(item, holder):
+                    inner = getattr(item, holder)
+                    if inner is None:
+                        continue
+                    for attr in ("cap", "vcap"):
+                        if hasattr(inner, attr):
+                            vcap = getattr(inner, attr)
+                            if vcap is not None:
+                                return vcap
+                    if hasattr(inner, "read") or hasattr(inner, "grab"):
+                        return inner
+
+    # 2) 객체 하나에 속성으로 붙어있는 형태
+    for attr in ("cap", "vcap"):
+        if hasattr(dm_handle, attr):
+            vcap = getattr(dm_handle, attr)
+            if vcap is not None:
+                return vcap
+    for holder in ("camera", "cam"):
+        if hasattr(dm_handle, holder):
+            inner = getattr(dm_handle, holder)
+            if inner is None:
+                continue
+            for attr in ("cap", "vcap"):
+                if hasattr(inner, attr):
+                    vcap = getattr(inner, attr)
+                    if vcap is not None:
+                        return vcap
+            if hasattr(inner, "read") or hasattr(inner, "grab"):
+                return inner
+
+    return None
+
+# =======================
+# 캡처 유틸 (스캔 직전: DM 핸들 우선, 메모리 서빙)
+# =======================
+def _capture_rgb_snapshot_quick(
+    S, dm_handle, save_dir: Path, event_id: int, rois_for_capture=None
+) -> Optional[str]:
+    """
+    1) DM 퍼시스턴트 핸들에서 프레임 확보(동일 디바이스 재오픈 금지)
+    2) 실패 시 DM/EMB가 '다른' 디바이스일 때만 임베딩 장치로 폴백
+    3) 확보된 프레임을 '고정 ROI(520x550, dx=+90, dy=-160)'으로 자른 뒤 JPEG 인코딩
+    결과물: 메모리 보관(_CAP_JPEG) 및 "__mem__" 마커 리턴
+           환경변수 CAPTURE_TO_DISK=1 이면 save_dir에도 백업 저장
+    """
+    CAPTURE_NAME = os.getenv("CAPTURE_NAME", "capture.jpg")
+    CAPTURE_TO_DISK = int(os.getenv("CAPTURE_TO_DISK", "0"))  # 1이면 디스크에도 저장
+    JPEG_Q = int(os.getenv("CAPTURE_JPEG_QUALITY", "85"))
+    frame = None
+
+    # --- DM 핸들에서 VideoCapture 꺼내기 ---
+    vcap = _extract_vcap_from_dm_handle(dm_handle)
+    if vcap is not None:
+        try:
+            with DM.lock():
+                if dm_read_frame is not None:
+                    out = dm_read_frame(vcap)  # datamatrix.read_frame_nonblocking(cap)
+                    if isinstance(out, tuple):
+                        ok = bool(out[0])
+                        frame = out[1] if ok and len(out) > 1 else None
+                    else:
+                        frame = out
+                else:
+                    ok, f = vcap.read()
+                    if ok and f is not None:
+                        frame = f
+        except Exception as e:
+            print("[cap] DM vcap 캡처 실패:", e)
+            frame = None
+    else:
+        print("[cap] dm_handle에서 cam/cap을 찾지 못함")
+
+    # --- 폴백: 임베딩 카메라가 '다른' 디바이스일 때만 잠깐 열기 ---
+    if frame is None:
+        try:
+            if not same_device(getattr(S.dm, "camera", 0), getattr(S.embedding, "cam_dev", 0)):
+                cap = cv2.VideoCapture(getattr(S.embedding, "cam_dev", 0))
+                try:
+                    w = int(getattr(S.embedding, "width", 0) or 1280)
+                    h = int(getattr(S.embedding, "height", 0) or 720)
+                    fps = int(getattr(S.embedding, "fps", 6) or 6)
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  w)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+                    cap.set(cv2.CAP_PROP_FPS, fps)
+                except Exception:
+                    pass
+                ok, f = cap.read()
+                cap.release()
+                if ok and f is not None:
+                    frame = f
+        except Exception as e:
+            print("[cap] embedding 폴백 캡처 실패:", e)
+            frame = None
+
+    if frame is None:
+        _set_cap_jpeg(None)
+        return None
+
+    # --- 고정 ROI로 크롭 (W=520, H=550, dx=+90, dy=-160) ---
+    try:
+        H, W = frame.shape[:2]
+        rw, rh = 520, 550
+        ox, oy = 90, -160  # 중심 기준 오프셋(+x=오른쪽, +y=아래)
+        cx, cy = W // 2, H // 2
+        x0 = int(round(cx + ox - rw / 2.0))
+        y0 = int(round(cy + oy - rh / 2.0))
+        x1 = x0 + rw
+        y1 = y0 + rh
+        # 경계 클램프
+        x0 = max(0, min(W, x0)); y0 = max(0, min(H, y0))
+        x1 = max(0, min(W, x1)); y1 = max(0, min(H, y1))
+        if x1 > x0 and y1 > y0:
+            frame = frame[y0:y1, x0:x1]
+        else:
+            print("[cap] 고정 ROI가 유효 영역을 벗어남 → 원본 저장")
+    except Exception as e:
+        print("[cap] 고정 ROI 크롭 실패(원본 사용):", e)
+
+    # --- 파일 저장 대신 메모리 보관 ---
+    try:
+        ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_Q])
+        if not ok:
+            print("[cap] imencode 실패")
+            _set_cap_jpeg(None)
+            return None
+
+        jpeg_bytes = buf.tobytes()
+        _set_cap_jpeg(jpeg_bytes)
+
+        # 필요 시만 디스크에도 백업 저장 (기본값 비활성)
+        if CAPTURE_TO_DISK:
+            fpath = save_dir / CAPTURE_NAME
+            try:
+                with open(str(fpath), "wb") as f:
+                    f.write(jpeg_bytes)
+                print("[cap] saved(backup):", fpath)
+            except Exception as e:
+                print("[cap] backup save 실패:", e)
+
+        # 프론트엔드에 '메모리 캡처 사용 중'임을 알리는 마커
+        return "__mem__"
+
+    except Exception as e:
+        print("[cap] encode/save 예외:", e)
+        _set_cap_jpeg(None)
+        return None
+
 def main():
     t_all = time.time()
     print("[init] start]")
-
-    # 설정/경로
     CFG, CONFIG_PATH = load_config()
     S = get_settings(CFG)
-
-    # 호환 셋업
-    if not hasattr(S, 'dm') and hasattr(S, 'datamatrix'):
+    if not hasattr(S, "dm") and hasattr(S, "datamatrix"):
         S.dm = S.datamatrix
 
     class _NS: pass
-    if not hasattr(S, 'paths'): S.paths = _NS()
-    if not hasattr(S.paths, 'db'):
-        S.paths.db = getattr(getattr(S, 'storage', _NS()), 'sqlite_path', 'pack.db')
-    if not hasattr(S.paths, 'centroids'):
-        S.paths.centroids = getattr(getattr(S, 'model', _NS()), 'centroids_path', 'centroids.npz')
-    if not hasattr(S.paths, 'lgbm'):
-        S.paths.lgbm = getattr(getattr(S, 'model', _NS()), 'lgbm_path', 'lgbm.pkl')
+    if not hasattr(S, "paths"): S.paths = _NS()
+    if not hasattr(S.paths, "db"): S.paths.db = getattr(getattr(S, "storage", _NS()), "sqlite_path", "pack.db")
+    if not hasattr(S.paths, "centroids"): S.paths.centroids = getattr(getattr(S, "model", _NS()), "centroids_path", "centroids.npz")
+    if not hasattr(S.paths, "lgbm"): S.paths.lgbm = getattr(getattr(S, "model", _NS()), "lgbm_path", "lgbm.pkl")
+    if hasattr(S, "model"):
+        if not hasattr(S.model, "min_margin"): S.model.min_margin = 0.05
+        if not hasattr(S.model, "prob_threshold"): S.model.prob_threshold = 0.55
+        if not hasattr(S.model, "smooth_window"): S.model.smooth_window = 3
+        if not hasattr(S.model, "smooth_min"): S.model.smooth_min = 2
+        if not hasattr(S.model, "topk"): S.model.topk = 3
+        if not hasattr(S.model, "type"): S.model.type = "lgbm"
 
-    if hasattr(S, 'model'):
-        if not hasattr(S.model, 'min_margin'):      S.model.min_margin = 0.05
-        if not hasattr(S.model, 'prob_threshold'):  S.model.prob_threshold = 0.40
-        if not hasattr(S.model, 'smooth_window'):   S.model.smooth_window = 3
-        if not hasattr(S.model, 'smooth_min'):      S.model.smooth_min = 2
-        if not hasattr(S.model, 'topk'):            S.model.topk = 3
-        if not hasattr(S.model, 'type'):            S.model.type = "lgbm"
-
-    # 3뷰 옵션 기본값 주입
     _inject_default_embedding_options(S)
-
-    # UI 시작
     _start_web_ui()
 
     # 시리얼 설정
     ser = None
+    ser_cutter = None
     if HAVE_SERIAL:
         SERIAL_PORT = os.getenv("ARDUINO_PORT", "/dev/ttyACM0")
         BAUD_RATE = int(os.getenv("ARDUINO_BAUD", "9600"))
         try:
             ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.01)
-            print("[serial] 아두이노 연결 성공: {} (Baud: {})".format(SERIAL_PORT, BAUD_RATE))
+            print(f"[serial] 스캐너 아두이노 연결 성공: {SERIAL_PORT} (Baud: {BAUD_RATE})")
         except Exception as e:
-            print("[serial] 아두이노 연결 실패: {}".format(e))
+            print(f"[serial] 스캐너 아두이노 연결 실패: {e}")
             print("[serial] 키보드 'D' 입력은 계속 사용 가능합니다.")
+        CUTTER_SERIAL_PORT = os.getenv("CUTTER_ARDUINO_PORT", "/dev/ttyACM1")
+        CUTTER_BAUD_RATE = int(os.getenv("CUTTER_ARDUINO_BAUD", "9600"))
+        try:
+            ser_cutter = serial.Serial(CUTTER_SERIAL_PORT, CUTTER_BAUD_RATE, timeout=1.0)
+            print(f"[serial] 커팅기 아두이노 연결 성공: {CUTTER_SERIAL_PORT} (Baud: {CUTTER_BAUD_RATE})")
+        except Exception as e:
+            print(f"[serial] 커팅기 아두이노 연결 실패: {e}")
     else:
         print("[serial] 'pyserial' 미설치 → 아두이노 연동 생략 (pip3 install pyserial)")
 
-    # 경량 웜업
     maybe_run_jetson_perf()
     warmup_opencv_kernels()
-
-    # depth 설정 적용
     apply_depth_overrides(depthmod, S)
-
-    # DB
     conn = Storage.open_db(S.paths.db)
 
     # DepthEstimator
-    try:
-        roi_px = (int(S.depth.roi_px[0]), int(S.depth.roi_px[1]))
-    except Exception:
-        roi_px = (260, 260)
-    try:
-        roi_off = (int(S.depth.roi_offset[0]), int(S.depth.roi_offset[1]))
-    except Exception:
-        roi_off = (20, -100)
-
-    depth = DepthEstimator(
-        width=S.depth.width, height=S.depth.height, fps=S.depth.fps,
-        roi_px=roi_px, roi_offset=roi_off
-    )
+    try: roi_px = (int(S.depth.roi_px[0]), int(S.depth.roi_px[1]))
+    except Exception: roi_px = (260, 260)
+    try: roi_off = (int(S.depth.roi_offset[0]), int(S.depth.roi_offset[1]))
+    except Exception: roi_off = (20, -100)
+    depth = DepthEstimator(width=S.depth.width, height=S.depth.height, fps=S.depth.fps, roi_px=roi_px, roi_offset=roi_off)
     depth.start()
     frames = depth.warmup(seconds=1.5)
     print("[warmup] RealSense frames={}".format(frames))
@@ -551,9 +705,9 @@ def main():
     if not ok_calib:
         print("[fatal] depth calib 실패. 바닥만 보이게 하고 재실행하세요.")
         try: depth.stop()
-        except: pass
+        except Exception: pass
         try: conn.close()
-        except: pass
+        except Exception: pass
         _set_status("error")
         return
 
@@ -563,24 +717,14 @@ def main():
     # ROI 정규화
     def _normalize_rois(rois):
         out = []
-        if not rois:
-            return out
+        if not rois: return out
         for r in rois:
             if isinstance(r, dict):
-                name = r.get("name", "ROI")
-                size = r.get("size", [0, 0]) or [0, 0]
-                off  = r.get("offset", [0, 0]) or [0, 0]
-                hflip = bool(r.get("hflip", False))
+                name = r.get("name", "ROI"); size = r.get("size", [0, 0]) or [0, 0]; off = r.get("offset", [0, 0]) or [0, 0]; hflip = bool(r.get("hflip", False))
             else:
-                name = getattr(r, "name", "ROI")
-                size = getattr(r, "size", [0, 0]) or [0, 0]
-                off  = getattr(r, "offset", [0, 0]) or [0, 0]
-                hflip = bool(getattr(r, "hflip", False))
-            try:
-                size = [int(size[0]), int(size[1])]
-                off  = [int(off[0]),  int(off[1])]
-            except Exception:
-                size = [0, 0]; off = [0, 0]
+                name = getattr(r, "name", "ROI"); size = getattr(r, "size", [0, 0]) or [0, 0]; off = getattr(r, "offset", [0, 0]) or [0, 0]; hflip = bool(getattr(r, "hflip", False))
+            try: size = [int(size[0]), int(size[1])]; off = [int(off[0]), int(off[1])]
+            except Exception: size = [0, 0]; off = [0, 0]
             out.append(dict(name=name, size=size, offset=off, hflip=hflip))
         return out
 
@@ -591,14 +735,29 @@ def main():
 
     # 임베더
     if same_device(S.dm.camera, S.embedding.cam_dev):
-        print("[warn] DM_CAMERA({})와 EMB_CAM_DEV({}) 동일. shared persistent handle + lock 사용".format(S.dm.camera, S.embedding.cam_dev))
+        print("[warn] DM_CAMERA({})와 EMB_CAM_DEV({}) 동일".format(S.dm.camera, S.embedding.cam_dev))
     emb = Emb.build_embedder(S)
     print("[img2emb.cfg] dev={} {}x{}@{} pixfmt={}".format(
         S.embedding.cam_dev, S.embedding.width, S.embedding.height, S.embedding.fps, S.embedding.pixfmt
     ))
 
-    # e2e warmup (임베딩 백엔드 워밍업)
-    Emb.warmup_shared(emb, S, dm_handle, DM.lock(), S.embedding.e2e_warmup_frames, S.embedding.e2e_pregrab)
+    # e2e warmup (공유 디바이스면 스킵)
+    WARMUP_FRAMES = int(getattr(S.embedding, "e2e_warmup_frames", 0) or 0)
+    if same_device(S.dm.camera, S.embedding.cam_dev):
+        # 동일 디바이스 공유 시 grab()가 블록될 수 있으므로 안전하게 스킵
+        print("[warmup] skip shared e2e warmup (same DM/EMB device)")
+        WARMUP_FRAMES = 0
+
+    try:
+        if WARMUP_FRAMES > 0:
+            Emb.warmup_shared(
+                emb, S, dm_handle, DM.lock(), WARMUP_FRAMES, S.embedding.e2e_pregrab
+            )
+        else:
+            print("[warmup] none (frames=0)")
+    except Exception as e:
+        # 워밍업 실패해도 기능상 문제 없음 — 런타임에서 첫 프레임 때 자동 준비됨
+        print("[warmup] skipped due to error:", e)
 
     # 프레임 펌프 시작
     IDLE_FPS = float(os.getenv("IDLE_PUMP_FPS", "1.0"))
@@ -607,110 +766,89 @@ def main():
 
     # 모델 & 스무더
     engine = Models.InferenceEngine(S)
-    smoother = Models.ProbSmoother(
-        window=int(getattr(S.model, 'smooth_window', 3)),
-        min_votes=int(getattr(S.model, 'smooth_min', 2))
-    )
+    smoother = Models.ProbSmoother(window=int(getattr(S.model, "smooth_window", 3)), min_votes=int(getattr(S.model, "smooth_min", 2)))
 
-    # 임베딩 모드 안내
-    if getattr(S.embedding, 'concat3', False):
-        print("[embed] 3-view concat 모드 활성: mirror_period={}".format(
-            int(getattr(S.embedding, 'mirror_period', 3))
-        ))
+    if getattr(S.embedding, "concat3", False):
+        print(f"[embed] 3-view concat 모드 활성: mirror_period={int(getattr(S.embedding, 'mirror_period', 3))}")
     else:
         print("[embed] 단일뷰 모드")
 
-    print("[ready] total init %.2fs" % (time.time()-t_all))
+    print("[ready] total init %.2fs" % (time.time() - t_all))
     print("[hint] D + Enter 또는 아두이노 신호 = 측정/스캔/추론")
     print("[hint] L + Enter = LGBM 학습")
     print("[hint] C + Enter = Centroid 학습")
     print("[hint] P = 일시정지 토글")
-    if HAVE_FLASK:
-        print("[hint] UI: http://localhost:8000")
+    if HAVE_FLASK: print("[hint] UI: http://localhost:8000")
 
     paused = False
-
-    # 임베딩 트리거 시 pregrab(프레임 선확보) — CPU-only/6fps 환경에선 0 권장
     EMB_PREGRAB_ON_TRIGGER = int(os.getenv("EMB_PREGRAB_ON_TRIGGER", "0"))
+
+    def send_to_cutter(bubble_length_mm):
+        if ser_cutter and ser_cutter.is_open and bubble_length_mm and bubble_length_mm > 0:
+            try:
+                message = f"B{int(bubble_length_mm)}\n"
+                ser_cutter.write(message.encode("utf-8"))
+                print(f"[serial] 커팅기 전송: '{message.strip()}' ({bubble_length_mm} mm)")
+                return True
+            except Exception as e:
+                print("[serial] 커팅기 전송 실패:", e)
+                return False
+        return False
 
     try:
         DM_TRACE_ID = 0
         while True:
             engine.reload_if_updated()
-
-            # 트리거 감지
             trigger_scan = False
-
-            # 1) 키보드
             cmd = stdin_readline_nonblock(0.05)
             uc = ""
             if cmd:
                 uc = cmd.strip().upper()
-                if uc == "D":
-                    trigger_scan = True
-
-            # 2) 아두이노
+                if uc == "D": trigger_scan = True
             if ser and ser.in_waiting > 0:
                 try:
-                    line = ser.readline().decode('utf-8').strip()
-                    if line == '1':
-                        print("[serial] 아두이노 '1' → 스캔 트리거(D)")
-                        trigger_scan = True
-                    elif line == '2':
-                        if not paused:
-                            paused = True
-                            _set_status("paused")
-                            print("[serial] 아두이노 '2' → 일시정지 ON")
-                        else:
-                            print("[serial] '2' 수신: 이미 일시정지 상태")
-                    elif line == '3':
-                        if paused:
-                            paused = False
-                            _set_status(None)
-                            print("[serial] 아두이노 '3' → 일시정지 OFF")
-                        else:
-                            print("[serial] '3' 수신: 이미 동작 중")
+                    line = ser.readline().decode("utf-8").strip()
+                    if line == "1":
+                        print("[serial] 아두이노 '1' → 스캔 트리거(D)"); trigger_scan = True
+                    elif line == "2":
+                        if not paused: paused = True; _set_status("paused"); print("[serial] 아두이노 '2' → 일시정지 ON")
+                        else: print("[serial] '2' 수신: 이미 일시정지 상태")
+                    elif line == "3":
+                        if paused: paused = False; _set_status(None); print("[serial] 아두이노 '3' → 일시정지 OFF")
+                        else: print("[serial] '3' 수신: 이미 동작 중")
                 except Exception:
                     pass
 
-            # L/C/T/P 핫키
             if uc:
-                if uc == "L":
-                    run_training_now(CONFIG_PATH, force_type="lgbm")
-                    engine.reload_if_updated(); continue
-                if uc == "C":
-                    run_training_now(CONFIG_PATH, force_type="centroid")
-                    engine.reload_if_updated(); continue
-                if uc == "T":
-                    print("[hint] 이제는 L/C로 모델별 학습이 가능합니다. (L=LGBM, C=Centroid)")
-                    run_training_now(CONFIG_PATH, force_type=None)
-                    engine.reload_if_updated(); continue
+                if uc == "L": run_training_now(CONFIG_PATH, force_type="lgbm"); engine.reload_if_updated(); continue
+                if uc == "C": run_training_now(CONFIG_PATH, force_type="centroid"); engine.reload_if_updated(); continue
+                if uc == "T": print("[hint] 이제는 L/C로 모델별 학습이 가능합니다. (L=LGBM, C=Centroid)"); run_training_now(CONFIG_PATH, force_type=None); engine.reload_if_updated(); continue
                 if uc == "P":
                     paused = not paused
-                    if paused:
-                        _set_status("paused")
-                        print("[state] 일시정지 ON: D/아두이노 입력 무시")
-                    else:
-                        _set_status(None)
-                        print("[state] 일시정지 OFF")
+                    if paused: _set_status("paused"); print("[state] 일시정지 ON: D/아두이노 입력 무시")
+                    else: _set_status(None); print("[state] 일시정지 OFF")
                     continue
 
-            # 스캔 트리거
             if trigger_scan:
                 if paused:
-                    print("[state] 일시정지 상태. D/아두이노 신호 무시")
-                    continue
-
+                    print("[state] 일시정지 상태. D/아두이노 신호 무시"); continue
                 DM_TRACE_ID += 1
                 tid = DM_TRACE_ID
                 t_press = t_now()
-                print("[D#{}][{}] key_down → scan_call".format(tid, ts_wall()))
+                print(f"[D#{tid}][{ts_wall()}] key_down → scan_call")
+                _set_status("analyzing"); _set_prob(None); _set_event_id(tid)
 
-                _set_status("analyzing")
-                _set_prob(None)
-
-                # 펌프 일시 정지 + 버스트 플러시
+                # 1) 먼저 펌프 정지
                 _SCAN_BUSY.set()
+
+                # 2) DM 핸들 우선 스냅샷 캡처 (메모리 보관)
+                try:
+                    cap_name = _capture_rgb_snapshot_quick(S, dm_handle, IMG_DIR, tid)
+                    _set_cap_image(cap_name)
+                except Exception as e:
+                    print("[cap] 예외:", e); _set_cap_image(None)
+
+                # 3) 버스트 플러시
                 try:
                     BURST_N = int(os.getenv("BURST_FLUSH_N", "10"))
                     BURST_TO_MS = int(os.getenv("BURST_FLUSH_TO_MS", "1"))
@@ -725,41 +863,27 @@ def main():
                     t_s0 = t_now()
                     payload = datamatrix_scan_persistent(None, debug=False, trace_id=tid)
                     t_s1 = t_now()
-                    print("[D#{}][{}] scan_return elapsed={} Tpress→scan_return={} payload={}".format(
-                        tid, ts_wall(), ms(t_s1 - t_s0), ms(t_s1 - t_press), "YES" if payload else "NO"
-                    ))
-                    if payload:
-                        print("[dm] payload={}".format(payload))
-                    else:
-                        print("[dm] payload 없음")
+                    print(f"[D#{tid}][{ts_wall()}] scan_return elapsed={ms(t_s1 - t_s0)} ms Tpress→scan_return={ms(t_s1 - t_press)} ms payload={'YES' if payload else 'NO'}")
+                    if payload: print(f"[dm] payload={payload}")
+                    else: print("[dm] payload 없음")
 
-                    # (A) DM 성공 → UI 즉시 업데이트 후 보조 기록만
                     if payload and _set_ui_from_label(payload):
-                        _set_warn(None)
-                        _set_prob(None)
-                        _set_status("done")
+                        _set_warn(None); _set_prob(None); _set_event_id(tid); _set_status("done")
+                        with _UI_LOCK: final_bubble_mm = _UI_STATE.get("bubble_mm")
+                        send_to_cutter(final_bubble_mm)
 
-                        # 기록용 depth/embedding 수집
-                        t_depth0 = t_now()
-                        feat = depth.measure_dimensions(duration_s=1.0, n_frames=10)
-                        t_depth1 = t_now()
-                        print("[D#{}][{}] depth_measure elapsed={}".format(tid, ts_wall(), ms(t_depth1 - t_depth0)))
+                        t_depth0 = t_now(); feat = depth.measure_dimensions(duration_s=1.0, n_frames=10); t_depth1 = t_now()
+                        print(f"[D#{tid}][{ts_wall()}] depth_measure elapsed={ms(t_depth1 - t_depth0)}")
                         if feat is None:
-                            print("[manual] 측정 실패")
-                            _SCAN_BUSY.clear()
-                            continue
-                        t_emb0 = t_now()
-                        vec = _embed_one_any(emb, S, dm_handle, pregrab=EMB_PREGRAB_ON_TRIGGER)  # ★ pregrab=0
-                        t_emb1 = t_now()
-                        print("[D#{}][{}] embed_one_frame elapsed={}".format(tid, ts_wall(), ms(t_emb1 - t_emb0)))
+                            print("[manual] 측정 실패"); _SCAN_BUSY.clear(); continue
+
+                        t_emb0 = t_now(); vec = _embed_one_any(emb, S, dm_handle, pregrab=EMB_PREGRAB_ON_TRIGGER); t_emb1 = t_now()
+                        print(f"[D#{tid}][{ts_wall()}] embed_one_frame elapsed={ms(t_emb1 - t_emb0)}")
                         if vec is None:
-                            print("[manual] 임베딩 실패")
-                            _SCAN_BUSY.clear()
-                            continue
-                        if feat["q"] < float(getattr(S.quality, 'q_warn', 0.30)):
-                            print("[notify] 품질 경고: q={:.2f} (임계 {:.2f})".format(
-                                feat['q'], float(getattr(S.quality, 'q_warn', 0.30))
-                            ))
+                            print("[manual] 임베딩 실패"); _SCAN_BUSY.clear(); continue
+
+                        if feat["q"] < float(getattr(S.quality, "q_warn", 0.30)):
+                            print(f"[notify] 품질 경고: q={feat['q']:.2f} (임계 {float(getattr(S.quality, 'q_warn', 0.30)):.2f})")
                         Storage.on_sample_record(conn, feat, vec, product_id=payload, has_label=1, origin="manual_dm")
                         smoother.buf.clear()
                         print("[infer] skip: DM 라벨 확정 → 모델 추론 생략")
@@ -769,107 +893,82 @@ def main():
                         print("[ui] DM 라벨 없음/형식 불일치 → 모델 라벨에서 파싱 예정")
 
                     # 2) depth 측정
-                    t_depth0 = t_now()
-                    feat = depth.measure_dimensions(duration_s=1.0, n_frames=10)
-                    t_depth1 = t_now()
-                    print("[D#{}][{}] depth_measure elapsed={}".format(tid, ts_wall(), ms(t_depth1 - t_depth0)))
+                    t_depth0 = t_now(); feat = depth.measure_dimensions(duration_s=1.0, n_frames=10); t_depth1 = t_now()
+                    print(f"[D#{tid}][{ts_wall()}] depth_measure elapsed={ms(t_depth1 - t_depth0)}")
                     if feat is None:
                         print("[manual] 측정 실패"); _set_status("error"); _SCAN_BUSY.clear(); continue
 
-                    # 3) 임베딩 (단일/3뷰 자동)
-                    t_emb0 = t_now()
-                    vec = _embed_one_any(emb, S, dm_handle, pregrab=EMB_PREGRAB_ON_TRIGGER)  # ★ pregrab=0
-                    t_emb1 = t_now()
-                    print("[D#{}][{}] embed_one_frame elapsed={}".format(tid, ts_wall(), ms(t_emb1 - t_emb0)))
+                    # 3) 임베딩
+                    t_emb0 = t_now(); vec = _embed_one_any(emb, S, dm_handle, pregrab=EMB_PREGRAB_ON_TRIGGER); t_emb1 = t_now()
+                    print(f"[D#{tid}][{ts_wall()}] embed_one_frame elapsed={ms(t_emb1 - t_emb0)}")
                     if vec is None:
                         print("[manual] 임베딩 실패"); _set_status("error"); _SCAN_BUSY.clear(); continue
 
-                    # 품질 알림
-                    if feat["q"] < float(getattr(S.quality, 'q_warn', 0.30)):
-                        print("[notify] 품질 경고: q={:.2f} (임계 {:.2f})".format(
-                            feat['q'], float(getattr(S.quality, 'q_warn', 0.30))
-                        ))
+                    if feat["q"] < float(getattr(S.quality, "q_warn", 0.30)):
+                        print(f"[notify] 품질 경고: q={feat['q']:.2f} (임계 {float(getattr(S.quality, 'q_warn', 0.30)):.2f})")
 
-                    # 4) 저장
                     Storage.on_sample_record(conn, feat, vec, product_id=None, has_label=0, origin="manual_no_dm")
 
-                    # === 벡터 구성(15 + emb) ===
-                    meta = np.array([
-                        feat["d1"], feat["d2"], feat["d3"],
-                        feat["mad1"], feat["mad2"], feat["mad3"],
-                        feat["r1"], feat["r2"], feat["r3"],
-                        feat["sr1"], feat["sr2"], feat["sr3"],
-                        feat["logV"], feat["logsV"], feat["q"]
-                    ], np.float32)
+                    meta = np.array(
+                        [feat["d1"], feat["d2"], feat["d3"], feat["mad1"], feat["mad2"], feat["mad3"],
+                         feat["r1"], feat["r2"], feat["r3"], feat["sr1"], feat["sr2"], feat["sr3"],
+                         feat["logV"], feat["logsV"], feat["q"]], np.float32)
                     full_vec = np.concatenate([meta, vec], axis=0)
                     full_vec = l2_normalize(full_vec)
-                    print("[vector] dim={} (meta 15 + emb {})".format(full_vec.shape[0], vec.shape[0]))
-                    print("[debug] ||full_vec||={:.6f}".format(np.linalg.norm(full_vec)))
+                    print(f"[vector] dim={full_vec.shape[0]} (meta 15 + emb {vec.shape[0]})")
+                    print(f"[debug] ||full_vec||={np.linalg.norm(full_vec):.6f}")
 
-                    # 5) 추론
                     top_lab, top_p, gap, backend = engine.infer(full_vec)
                     if backend is None:
-                        print("[infer] 모델 없음(파일 미존재 또는 로드 실패)")
-                        _set_prob(None); _set_status("error"); _SCAN_BUSY.clear(); continue
-                    print("[infer] {} top1: {} p={:.3f} gap={:.4f}".format(backend, top_lab, top_p, gap))
+                        print("[infer] 모델 없음(파일 미존재 또는 로드 실패)"); _set_prob(None); _set_status("error"); _SCAN_BUSY.clear(); continue
+                    print(f"[infer] {backend} top1: {top_lab} p={top_p:.3f} gap={gap:.4f}")
                     _set_prob(top_p)
 
-                    # ---- UI 갱신 + p 임계 기반 상태/경고 ----
-                    prob_th = float(getattr(S.model, 'prob_threshold', 0.40))
-                    low_prob = (top_p < prob_th)
+                    prob_th = float(getattr(S.model, "prob_threshold", 0.55))
+                    low_prob = top_p < prob_th
 
                     updated = _set_ui_from_label(top_lab)
-                    if low_prob:
-                        _set_warn("Warning! Percent is very low")
-                        _set_status("error")
-                    else:
-                        _set_warn(None)
-                        _set_status("done")
+                    _set_event_id(tid)
+
+                    if low_prob: _set_warn("Warning! Percent is very low"); _set_status("error")
+                    else: _set_warn(None); _set_status("done")
+
+                    with _UI_LOCK: final_bubble_mm = _UI_STATE.get("bubble_mm")
+                    send_to_cutter(final_bubble_mm)
 
                     if not updated:
                         print("[ui] 모델 라벨 파싱 실패(16자리 규격 아님)")
+                        # 필요 시 치수 기반으로 채우기
+                        # _set_ui_dims_and_bubble(feat["d1"], feat["d2"], feat["d3"])
 
-                    # ---- 스무딩(로그용) ----
-                    min_margin = float(getattr(S.model, 'min_margin', 0.05))
+                    min_margin = float(getattr(S.model, "min_margin", 0.05))
                     if gap < min_margin:
                         smoother.push(top_lab, top_p)
-                        print("[smooth] hold: small_margin gap={:.4f} (<{:.3f}), len={}/{}, top={} p={:.2f}".format(
-                            gap, min_margin, len(smoother.buf), S.model.smooth_window, top_lab, top_p
-                        ))
+                        print(f"[smooth] hold: small_margin gap={gap:.4f} (<{min_margin:.3f}), len={len(smoother.buf)}/{S.model.smooth_window}, top={top_lab} p={top_p:.2f}")
                         decided = smoother.maybe_decide(threshold=prob_th)
                         if decided is not None:
-                            lab, avgp = decided
-                            print("[decision] smoothed: {} p={:.2f}".format(lab, avgp))
+                            lab, avgp = decided; print(f"[decision] smoothed: {lab} p={avgp:.2f}")
                     elif low_prob:
                         smoother.push(top_lab, top_p)
-                        print("[smooth] hold: len={}/{} , top={} p={:.2f} (<{:.2f})".format(
-                            len(smoother.buf), S.model.smooth_window, top_lab, top_p, prob_th
-                        ))
+                        print(f"[smooth] hold: len={len(smoother.buf)}/{S.model.smooth_window} , top={top_lab} p={top_p:.2f} (<{prob_th:.2f})")
                         decided = smoother.maybe_decide(threshold=prob_th)
                         if decided is not None:
-                            lab, avgp = decided
-                            print("[decision] smoothed: {} p={:.2f}".format(lab, avgp))
+                            lab, avgp = decided; print(f"[decision] smoothed: {lab} p={avgp:.2f}")
                     else:
                         smoother.push(top_lab, top_p)
                         decided = smoother.maybe_decide(threshold=prob_th)
                         if decided is None:
                             status = smoother.status()
                             if status[0] is None:
-                                print("[smooth] hold: len={}/{}".format(len(smoother.buf), S.model.smooth_window))
+                                print(f"[smooth] hold: len={len(smoother.buf)}/{S.model.smooth_window}")
                             else:
                                 lab, votes, avgp = status
-                                print("[smooth] hold: len={}/{} , lead={} votes={} avgp={:.2f}".format(
-                                    len(smoother.buf), S.model.smooth_window, lab, votes, avgp
-                                ))
+                                print(f"[smooth] hold: len={len(smoother.buf)}/{S.model.smooth_window} , lead={lab} votes={votes} avgp={avgp:.2f}")
                         else:
-                            lab, avgp = decided
-                            print("[decision] smoothed: {} p={:.2f}".format(lab, avgp))
-
+                            lab, avgp = decided; print(f"[decision] smoothed: {lab} p={avgp:.2f}")
                 except Exception as e:
                     print("[error] D 처리 중 예외:", e)
-                    _set_status("error")
-                    _set_warn("오류가 발생했습니다.")
-                    _set_prob(None)
+                    _set_status("error"); _set_warn("오류가 발생했습니다."); _set_prob(None)
                 finally:
                     _SCAN_BUSY.clear()
 
@@ -878,25 +977,19 @@ def main():
     finally:
         _stop_frame_pump()
         if ser and ser.is_open:
-            ser.close()
-            print("[cleanup] serial port closed")
+            ser.close(); print("[cleanup] 스캐너 시리얼 포트가 닫혔습니다.")
+        if ser_cutter and ser_cutter.is_open:
+            ser_cutter.close(); print("[cleanup] 커팅기 시리얼 포트가 닫혔습니다.")
         try:
-            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            conn.execute("PRAGMA optimize")
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)"); conn.execute("PRAGMA optimize")
         except Exception:
             pass
-        try:
-            depth.stop()
-        except Exception:
-            pass
-        try:
-            conn.close()
-        except Exception:
-            pass
-        try:
-            DM.close_persistent()
-        except Exception:
-            pass
+        try: depth.stop()
+        except Exception: pass
+        try: conn.close()
+        except Exception: pass
+        try: DM.close_persistent()
+        except Exception: pass
         print("[cleanup] stopped")
 
 if __name__ == "__main__":

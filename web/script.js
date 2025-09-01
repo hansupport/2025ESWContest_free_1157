@@ -1,7 +1,8 @@
-/* ui.js — 안정화 버전 (사파리 호환/중복키 개선/캐시 버스터)
+/* script.js — 메모리 캡처 서빙 대응(사파리 호환/중복키 개선/캐시 버스터)
    - 완료/오류 상태일 때만 기록
    - W/L/H/bubble 모두 준비됐을 때만 기록
    - dedupe 기준: event_id(있으면) → updated_ts(초/밀리초 자동 판별)
+   - cap_image === "__mem__" 이면 /api/capture.jpg 를 바로 표시
 */
 const ROLL_WIDTH_MM = 200;
 
@@ -167,13 +168,26 @@ async function tick(){
     // 좌측 이미지 + 캐시 버스터
     var imgEl = document.getElementById('item_img');
     if (imgEl) {
-      if (s.type_id) {
-        var bust = s.updated_ts ? ('?v='+s.updated_ts) : '';
-        imgEl.src = '/imgfile/' + s.type_id + '.jpg' + bust;
+      var bust = s.updated_ts ? ('?v='+s.updated_ts) : '';
+      var src = null;
+
+      if (s.cap_image) {
+        if (s.cap_image === '__mem__') {
+          // 메모리에서 바로 서빙되는 최신 캡처
+          src = '/api/capture.jpg' + bust;
+          imgEl.alt = (s.type_name ? (s.type_name + ' (캡처)') : 'capture');
+        } else {
+          // 예전 방식(파일명 제공 시)
+          src = '/imgfile/' + s.cap_image + bust;
+          imgEl.alt = s.type_name || s.cap_image;
+        }
+      } else if (s.type_id) {
+        // 타입별 정적 이미지
+        src = '/imgfile/' + s.type_id + '.jpg' + bust;
         imgEl.alt = s.type_name || s.type_id;
-      } else {
-        imgEl.removeAttribute('src');
       }
+
+      if (src) imgEl.src = src; else imgEl.removeAttribute('src');
     }
 
     /* ====== 히스토리 업데이트 ======
