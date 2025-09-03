@@ -1,66 +1,69 @@
 embedding:
-  cam_dev: "/dev/video2"
-  pixfmt: "YUYV"          # Nano에서 MJPG가 더 느린 경우가 꽤 있음 → 우선 YUYV 유지
+  cam_dev: "/dev/video2"        
+  pixfmt: "YUYV" 
   width: 848
   height: 480
-  fps: 6
+  fps: 6 
 
-  # TinyMobileNet runtime spec (must match pretrain)
+  # TinyMobileNet 런타임 스펙 
   input_size: 128
   out_dim: 128
   width_scale: 0.35
-  fp16: false
-  use_depthwise: false
-  use_bn: false
-  pinned: false
+  fp16: false                   
+  use_depthwise: false         
+  use_bn: false             
+  pinned: false         
 
-  # img2emb 전용 ROI (center-based, w,h / dx,dy)
+  # img2emb 전용 ROI
   roi_px: [530, 530]
   roi_offset: [90, -130]
 
-  # 런타임에 로드할 ONNX 모델 경로
+  # ONNX 가중치 파일 경로
   weights_path: "model/weights/tinymnet_emb_128d_w035.onnx"
 
-  # E2E warmup (시동 시간 단축)
-  e2e_warmup_frames: 6     # 12 → 6으로 줄여 초기 워밍업 시간 절약
-  e2e_pregrab: 0           # ★ 트리거 시 추가 grab 비활성화(지연 최소화)
+  # 엔드투엔드 워밍업
+  e2e_warmup_frames: 6 
+  e2e_pregrab: 0   
 
-  # 3뷰 concat 임베딩
-  concat3: true           # 단일 뷰 추론(권장). true로 켜면 지연 증가 가능
-  mirror_period: 3         # (미사용, 유지)
-  center_shrink: 0.00      # (미사용, 유지)
-  mirror_shrink: 0.00      # (미사용, 유지)
-  # rois3: [w, h, dx, dy, hflip]  (center, left-mirror, right-mirror)
+  # 3뷰 concat 임베딩 설정
+  concat3: true   
+  mirror_period: 3      
+  center_shrink: 0.00        
+  mirror_shrink: 0.00      
+  
+  # rois3 포맷
   rois3:
-    - [520, 550,   90, -160, 0]   # center (hflip off)
-    - [320, 470, -420, -160, 1]   # left mirror  (hflip on)
-    - [330, 480,  630, -180, 1]   # right mirror (hflip on)
+    - [520, 550,   90, -160, 0]   # center
+    - [320, 470, -420, -160, 1]   # left mirror
+    - [330, 480,  630, -180, 1]   # right mirror
 
 depth:
-  width: 1280
-  height: 720
+  width: 1280      
+  height: 720       
   fps: 6
-  roi_px: [260, 270]
-  roi_offset: [12, -90]
-  DECIM: 1
-  PLANE_TAU: 0.004
-  H_MIN_BASE: 0.003
-  H_MAX: 0.4
-  MIN_OBJ_PIX: 40
-  BOTTOM_ROI_RATIO: 0.20
-  HOLE_FILL: false
-  CORE_MARGIN_PX: 1
-  P_LO: 1.0
-  P_HI: 99.0
+  roi_px: [260, 270]             
+  roi_offset: [12, -90]         
+  DECIM: 1                       
+  PLANE_TAU: 0.004               
+  H_MIN_BASE: 0.003               
+  H_MAX: 0.4                  
+  MIN_OBJ_PIX: 40               
+  BOTTOM_ROI_RATIO: 0.20       
+  HOLE_FILL: false            
+  CORE_MARGIN_PX: 1          
+  P_LO: 1.0                  
+  P_HI: 99.0                
 
 datamatrix:
-  camera: 2
-  prefer_res: [1920, 1080]
+  camera: 2                     
+  prefer_res: [1920, 1080]      
   prefer_fps: 6
-  scan_timeout_s: 2.0
-  decode_interval: 0.20
-  log_every_decode: 0
-  max_backoff: 1.0
+  scan_timeout_s: 2.0            
+  decode_interval: 0.20         
+  log_every_decode: 0           
+  max_backoff: 1.0             
+  
+  # ROI 목록
   rois:
     - name: ROI_LEFT_MIRROR
       size: [390, 500]
@@ -76,17 +79,17 @@ datamatrix:
       hflip: false
 
 quality:
-  q_warn: 0.30
+  q_warn: 0.40      
 
 storage:
-  sqlite_path: "pack.db"
+  sqlite_path: "pack.db"   
 
 model:
-  type: "lgbm"                # "lgbm" | "centroid"
-  centroids_path: "centroids.npz"
-  lgbm_path: "lgbm.pkl"
-  topk: 3
-  # (옵션)
+  type: "lgbm"   
+  centroids_path: "centroids.npz" 
+  lgbm_path: "lgbm.pkl"      
+  topk: 3         
+  # 선택 옵션
   # top1_threshold: 0.40
   # smooth_window: 3
   # smooth_min_votes: 2
@@ -101,11 +104,10 @@ lgbm:
   feature_fraction: 0.8
   bagging_fraction: 0.8
   bagging_freq: 1
-  # class_weight: "balanced"   # sklearn 래퍼용 개념이라 lgb.train 경로에선 미사용
   seed: 42
-  cv_k: 5                      # K-fold 수 (그리드/평가 공통)
+  cv_k: 5       
 
-# ↓ 이 섹션이 존재하면 train.py가 자동으로 Grid Search 수행 (--grid 1 없이도 동작)
+# train.py가 자동으로 Grid Search 수행
 lgbm_grid:
   learning_rate: [0.03, 0.05, 0.08]
   num_leaves: [31, 63]
@@ -114,12 +116,12 @@ lgbm_grid:
   bagging_fraction: [0.70, 0.90]
   bagging_freq: [1]
   n_estimators: [200, 400]
-  max_depth: [-1, 12]          # 선택적: 깊이 제한 테스트
+  max_depth: [-1, 12]   
 
 training:
-  min_count: 2
-  min_q: 0.0
-
+  min_count: 2                 
+  min_q: 0.0           
+  
 arduino:
-  port: "/dev/ttyACM0"
-  baudrate: 9600
+  port: "/dev/ttyACM0"         
+  baudrate: 9600                
