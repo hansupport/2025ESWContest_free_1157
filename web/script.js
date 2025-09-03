@@ -1,29 +1,37 @@
-/* script.js — 메모리 캡처 서빙 대응(사파리 호환/중복키 개선/캐시 버스터)
-   - 완료/오류 상태일 때만 기록
-   - W/L/H/bubble 모두 준비됐을 때만 기록
-   - dedupe 기준: event_id(있으면) → updated_ts(초/밀리초 자동 판별)
-   - cap_image === "__mem__" 이면 /api/capture.jpg 를 바로 표시
+/*
+- Web UI 스크립트
+- 500ms마다 /api/state 폴링 → DOM 갱신(종류/치수/뽁뽁이 길이/확률/경고/상태 램프)
+- 최신 캡처 이미지 표시: "__mem__"→/api/capture.jpg, 파일명→/imgfile/* (캐시 버스터 적용)
+- 히스토리 최근 4건 유지(dedupe: event_id 우선, 없으면 updated_ts)
+- 타임스탬프(초/밀리초) 자동 인식, mm↔cm 표시 분리 렌더
+- 계산식 안내 문자열 출력(롤폭/레이어/overlap/slack)
 */
 const ROLL_WIDTH_MM = 200;
 
+// mm-> cm 변환(소숫점 1자리)
 function mmToCm(x){ if(x==null) return "—"; return (x/10).toFixed(1); }
 
-// t가 초/밀리초 무엇이든 알아서 처리
+// 타임스탬프 초/밀리초 자동 판별
 function tsToDate(t){
   if(!t && t!==0) return null;
   // 밀리초 범위(>=1e12)면 그대로, 아니면 초→밀리초
   var ms = (t >= 1e12) ? t : (t * 1000);
   try { return new Date(ms); } catch(e){ return null; }
 }
+
+//  date 포맷터
 function tsFmt(t){
   var d = tsToDate(t);
   return d ? d.toLocaleString() : "—";
 }
 
+// 안전한 텍스트 주입
 function setText(id, txt){
   var el = document.getElementById(id);
   if(el) el.textContent = txt;
 }
+
+// 경고 배너 토글, 빈 값이면 감춤
 function setWarn(msg){
   var el = document.getElementById('warn');
   if(!el) return;
@@ -35,6 +43,8 @@ function setWarn(msg){
     el.style.display = 'none';
   }
 }
+
+// 상단 상태 램프 on/off. status : 분석중, 분석 완료, 에러, 일시정지
 function setLamps(status){
   var ids = ["analyzing","done","paused","error"];
   for(var i=0;i<ids.length;i++){
@@ -45,7 +55,7 @@ function setLamps(status){
   }
 }
 
-// 숫자/단위 분리 렌더
+// 숫자/단위 분리 렌더 -mm
 function setMmHTML(id, mmVal){
   var el = document.getElementById(id);
   if(!el) return;
@@ -55,6 +65,7 @@ function setMmHTML(id, mmVal){
     el.innerHTML = '<span class="num">'+mmVal+'</span><span class="unit"> mm</span>';
   }
 }
+// 숫자/단위 분리 렌더 -cm
 function setCmHTML(id, mmVal){
   var el = document.getElementById(id);
   if(!el) return;
@@ -65,11 +76,16 @@ function setCmHTML(id, mmVal){
   }
 }
 
-/* ====== 기록(최신 4개) ====== */
+/*
+====== 기록(최신 4개) ======
+키: event_id 우선, 없으면 updated_ts로 dedupe.
+완료/에러 상태에서만 기록. 
+*/
 var __prev_ts = null;
 var __history = [];
-var __last_history_key = null;  // 마지막으로 기록한 식별자(event_id/updated_ts)
+var __last_history_key = null;
 
+// 히스토리에 1건 추가하고 리스트 렌더
 function pushHistory(s) {
   var name = s.type_name || '—';
   var w = (s.W!=null ? s.W : '—');
@@ -96,10 +112,9 @@ function pushHistory(s) {
     ul.appendChild(li);
   }
 }
-
+// 메인 폴링 루프(500ms) (최신 상태/이미지를 즉시 반영.)
 async function tick(){
   try{
-    // 캐시 버스터(강화)
     var r = await fetch('/api/state?t=' + Date.now(), {
       cache:'no-store',
       headers: { 'Cache-Control': 'no-store' }
@@ -127,7 +142,7 @@ async function tick(){
     var pv = (s.p==null) ? '—' : (typeof s.p==='number' ? s.p.toFixed(3) : String(s.p));
     setText('prob', 'p = ' + pv);
 
-    // 공통
+    // 공통 정보/ 계산식 안내
     setText('ts', tsFmt(s.updated_ts));
     var p = s.params || {};
     var layers = (p.layers!=null ? p.layers : '?');
@@ -144,7 +159,7 @@ async function tick(){
 '총 = 한 바퀴×'+layers+'층×줄수 + overlap('+overlap+'mm) → 마지막에 slack('+slackPct+'%) 적용';
     }
 
-    // (옵션) 라벨 모드 안내
+    // 라벨 모드 안내
     var params2 = document.getElementById('params2');
     if (params2) {
       params2.classList.add('small','mono');
@@ -162,7 +177,7 @@ async function tick(){
       }
     }
 
-    // 상태 램프
+    // 상태 램프 갱신
     setLamps(s.status || null);
 
     // 좌측 이미지 + 캐시 버스터
@@ -182,7 +197,7 @@ async function tick(){
           imgEl.alt = s.type_name || s.cap_image;
         }
       } else if (s.type_id) {
-        // 타입별 정적 이미지
+        // 타입별 정적 이미지(없으면 브라우저 404)
         src = '/imgfile/' + s.type_id + '.jpg' + bust;
         imgEl.alt = s.type_name || s.type_id;
       }
@@ -200,7 +215,7 @@ async function tick(){
 
     if (readyForHistory) {
       var idPart = (s.event_id!=null ? s.event_id : (s.updated_ts!=null ? s.updated_ts : 0));
-      var key = String(idPart); // 동일 이벤트면 동일키, 새 이벤트면 다른키
+      var key = String(idPart);
       if (key !== __last_history_key) {
         pushHistory(s);
         __last_history_key = key;
