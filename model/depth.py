@@ -1,10 +1,7 @@
 # depth.py
-# D435f 깊이 기반 컨베이어 물체 치수 측정 + 통계 피처 산출(10프레임)
-# - Height: 바닥 평면 기준(+s), 물체 마스크 전체에서 s의 최대값
-# - L/W: 평면 투영 후 PCA 축에서 퍼센타일 폭(Q99-Q01)
-# - 여러 프레임 요약: d1,d2,d3(중앙값), MAD1..3, r̄1..3, sr1..3, logV̄, logsV, q
-# - 외부에서 DepthEstimator 클래스를 통해 이용 (ROI는 roi_px + roi_offset 사용)
-
+# D435f 깊이 기반 컨베이어 물체 치수 측정 , 통계 피처 산출
+# 바닥 평면 기준, 물체 마스크 전체에서 s의 최대값
+# 평면 투영 후 PCA 축에서 퍼센타일 폭
 import numpy as np
 import cv2, time
 import pyrealsense2 as rs
@@ -14,27 +11,31 @@ rng = np.random.default_rng(42)
 # 기본 파라미터
 W, H, FPS = 1280, 720, 6
 DECIM = 1
-PLANE_TAU = 0.004       # ~4mm
-H_MIN_BASE = 0.003      # ~3mm
+PLANE_TAU = 0.004
+H_MIN_BASE = 0.003
 H_MAX = 0.40
 MIN_OBJ_PIX = 40
 BOTTOM_ROI_RATIO = 0.20
 HOLE_FILL = False
 CORE_MARGIN_PX = 1
-P_LO, P_HI = 1.0, 99.0  # 퍼센타일 폭
+P_LO, P_HI = 1.0, 99.0
 
 def clamp(v, lo, hi): return max(lo, min(hi, v))
 
+# 카메라 바라보는 방향으로 법선 벡터를 통일
 def orient_normal_to_camera(n):
     cam_dir = np.array([0., 0., -1.], dtype=np.float32)
     return n if float(np.dot(n, cam_dir)) > 0 else -n
 
+# 평면 법선 n으로부터 평면 위 직교 좌표축 u, v 생성
 def plane_axes_from_normal(n):
     t = np.array([1.,0.,0.]) if abs(n[0]) < 0.9 else np.array([0.,0.,1.])
     u = np.cross(n, t); u /= (np.linalg.norm(u)+1e-12)
     v = np.cross(n, u); v /= (np.linalg.norm(v)+1e-12)
     return u, v
 
+# RANSAC으로 바닥 평면 추정
+# 무작위 3점으로 후보 평면 생성, 거리 임계치로 인라이어 최대화, 인라이어에 대해 SVD 재추정, 카메라를 향하도록 법선 정방향화
 def fit_plane_ransac(P, iters=300, tau=PLANE_TAU, min_inliers=1200):
     N = P.shape[0]
     if N < 3: return None
@@ -60,12 +61,14 @@ def fit_plane_ransac(P, iters=300, tau=PLANE_TAU, min_inliers=1200):
     n_ref = orient_normal_to_camera(n_ref)
     return n_ref.astype(np.float32), c.astype(np.float32)
 
+# 3D 포인트맵 P3에 대해 평면(plane_n, plane_p0) 기준 서명 거리 s 계산
 def signed_distance_map(P3, plane_n, plane_p0):
     S = np.einsum('ijk,k->ij', P3 - plane_p0, plane_n).astype(np.float32)
     invalid = ~np.isfinite(P3).all(axis=2)
     S[invalid] = np.nan
     return S
 
+# 높이 기준 h_min을 데이터 분포에서 동적으로 산출
 def dynamic_h_min(s_map, base=H_MIN_BASE):
     s_valid = s_map[np.isfinite(s_map)]
     if s_valid.size < 500:
@@ -78,15 +81,18 @@ def dynamic_h_min(s_map, base=H_MIN_BASE):
     thr = max(base, float(med + max(0.002, 1.3*sigma)))
     return thr
 
+# 거리 맵에서 물체 후보 마스크 생성
 def object_mask_from_height(s_map, h_min, h_max):
     mask = (s_map > h_min) & (s_map < h_max) & np.isfinite(s_map)
     mask = mask.astype(np.uint8)*255
     k3 = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
     k5 = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,  k3, iterations=1)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k5, iterations=1)  # ← 3.6 호환(월러스 제거)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k5, iterations=1)
     return mask
 
+# 외곽 최대 영역을 찾아 채워진 마스크와 면적 반환
+# 없으면 None 반환
 def largest_external_component(mask):
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not cnts: return None
@@ -95,6 +101,7 @@ def largest_external_component(mask):
     cv2.drawContours(filled, [c], -1, 255, thickness=cv2.FILLED)
     return filled, int(cv2.contourArea(c))
 
+# 마스크를 내부로 수축해, 가장자리 영향 줄이기
 def erode_core(mask, rpx=CORE_MARGIN_PX):
     if mask is None: return None
     dt = cv2.distanceTransform((mask>0).astype(np.uint8), cv2.DIST_L2, 3)
@@ -103,6 +110,7 @@ def erode_core(mask, rpx=CORE_MARGIN_PX):
         core = (dt > max(1, rpx-1)).astype(np.uint8)*255
     return core
 
+# 평면 투영 좌표 UV에 대해 PCA 축 길이 계산
 def robust_pca_lengths(UV):
     mu = UV.mean(axis=0, keepdims=True)
     X = UV - mu
@@ -126,10 +134,12 @@ def robust_pca_lengths(UV):
         evecs = evecs[:, ::-1]
     return L, W, mu[0], evecs
 
+# 깊이 기반 치수 측정의 고수준 엔트리 포인트
 class DepthEstimator:
     def __init__(self,
                  width=W, height=H, fps=FPS,
                  roi_ratio=0.60, roi_px=(230,230), roi_offset=(20,-210)):
+        # 초기 설정과 필터 준비
         self.width = width; self.height = height; self.fps = fps
         self.roi_ratio = roi_ratio
         self.roi_w_px, self.roi_h_px = roi_px
@@ -157,7 +167,7 @@ class DepthEstimator:
         except Exception:
             pass
 
-    # ---------- pipeline ----------
+    # RealSense 파이프라인 시작
     def start(self):
         self.pipe = rs.pipeline()
         cfg = rs.config()
@@ -182,6 +192,7 @@ class DepthEstimator:
             pass
         self.pc = rs.pointcloud()
 
+    # 파이프라인 정지 및및 상태 초기화
     def stop(self):
         try:
             if self.pipe: self.pipe.stop()
@@ -193,6 +204,7 @@ class DepthEstimator:
         self.have_plane = False
         self.plane_n = None; self.plane_p0 = None
 
+    # 워밍업 동안 프레임 받아 파이프라인 안정화
     def warmup(self, seconds=1.0):
         t0 = time.time(); cnt = 0
         while time.time() - t0 < seconds:
@@ -202,7 +214,7 @@ class DepthEstimator:
             cnt += 1
         return cnt
 
-    # ---------- utils ----------
+    # 깊이 처리 파이프라인 수행 후 포인트클라우드 생성
     def _grab_depth_points(self):
         frames = self.pipe.wait_for_frames()
         depth  = frames.get_depth_frame()
@@ -220,6 +232,7 @@ class DepthEstimator:
         P3_full[z == 0] = np.nan
         return d, P3_full, (w,h)
 
+    # 인터페이스 ROI 사양으로 정사각형 ROI 계산
     def _compute_roi(self, w, h):
         if self.roi_w_px > 0 and self.roi_h_px > 0:
             S = int(min(clamp(self.roi_w_px,8,min(w,h)),
@@ -232,7 +245,7 @@ class DepthEstimator:
         y0 = clamp(cy - S//2, 0, h - S)
         return x0, x0+S, y0, y0+S, S
 
-    # ---------- calibration ----------
+    # 바닥 평면 보정
     def calibrate(self, max_seconds=3.0):
         t0 = time.time()
         ok = False
@@ -257,7 +270,7 @@ class DepthEstimator:
         self.have_plane = ok
         return ok
 
-    # ---------- single measurement ----------
+    # 단일 프레임에서 LWH 계산
     def measure_once(self):
         if not self.have_plane:
             return None, None, None
@@ -268,7 +281,7 @@ class DepthEstimator:
         P3 = P3_full[y0:y1, x0:x1, :]
         ch, cw = P3.shape[:2]
 
-        # 프레임별 바닥 오프셋 보정(ROI 하단 중앙값=0)
+        # 프레임별 바닥 오프셋 보정
         band_h0 = int(P3.shape[0]*(1.0 - BOTTOM_ROI_RATIO))
         Sband = signed_distance_map(P3[band_h0:], self.plane_n, self.plane_p0)
         med = np.nanmedian(Sband[np.isfinite(Sband)])
@@ -318,7 +331,7 @@ class DepthEstimator:
         d_sorted = np.sort([Lmm, Wmm, Hmm]).astype(np.float32)
         return float(d_sorted[0]), float(d_sorted[1]), float(d_sorted[2])
 
-    # ---------- multi-frame summary ----------
+    # 프레임을 모아 안정된 치수와 품질 지표 계산
     def measure_dimensions(self, duration_s=0.7, n_frames=10):
         t0 = time.time()
         vals = []
