@@ -1,20 +1,7 @@
 # pretrain_weight.py 
-# torch 1.10.0 CPU/NO CUDA, torchvision 0.11.3)
-# - model/pretrain/img_data 의 ROI 이미지를 사용해 TinyMobileNet(student)을
-#   CPU teacher로부터 코사인 증류(pretext) 사전학습
-# - 3뷰 파일명 cap_YYYYmmdd_HHMMSS_{c|lm|rm}.jpg 인식, 뷰별 증강/밸런싱 적용
-# - 결과: .pth(state_dict) + .onnx 동시 저장 → 런타임 ONNX로 바로 사용
-#
-# 사용 예:
-#   cd model/pretrain
-#   python3 pretrain_weight.py \
-#     --size 128 --out_dim 128 --width 0.35 --no_dw --no_bn \
-#     --out_pth ../weights/tinymnet_emb_128d_w035.pth \
-#     --out_onnx ../weights/tinymnet_emb_128d_w035.onnx
-#
-#   # 평가만:
-#   python3 pretrain_weight.py --eval_only --out_pth ../weights/tinymnet_emb_128d_w035.pth
-
+# model/pretrain/img_data 의 ROI 이미지를 사용해 TinyMobileNet(student)을 CPU teacher로부터 코사인 증류 사전학습
+# 3뷰 파일명 cap_YYYYmmdd_HHMMSS.jpg 인식, 뷰별 증강/밸런싱 적용
+# 결과: .pth(state_dict) + .onnx 동시 저장 → 런타임 ONNX로 바로 사용
 import os
 import sys
 import glob
@@ -24,62 +11,59 @@ from pathlib import Path
 import copy
 import math
 import random
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-
-# torchvision은 CPU 빌드(0.11.3) 가정
 from torchvision import models, transforms
 from PIL import Image
 
-# =====================
+
 # 경로/기본값
-# =====================
-ROOT = Path(__file__).resolve().parents[1]                        # .../model
-DATA_DIR = ROOT / "pretrain" / "img_data"                         # 캡처 이미지 폴더
-OUT_PTH  = ROOT / "weights" / "tinymnet_emb_128d_w035.pth"        # 결과 가중치 경로(기본)
-OUT_ONNX = ROOT / "weights" / "tinymnet_emb_128d_w035.onnx"       # 결과 ONNX 경로(기본)
+ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = ROOT / "pretrain" / "img_data"
+OUT_PTH  = ROOT / "weights" / "tinymnet_emb_128d_w035.pth"
+OUT_ONNX = ROOT / "weights" / "tinymnet_emb_128d_w035.onnx"
 OUT_PTH.parent.mkdir(parents=True, exist_ok=True)
 
-# 런타임과 반드시 일치
 DEF_INPUT_SIZE   = 128
 DEF_EMBED_DIM    = 128
 DEF_WIDTH_SCALE  = 0.35
-DEF_USE_DW       = False   # ★ 런타임과 맞추세요
-DEF_USE_BN       = False   # ★ 런타임과 맞추세요
+DEF_USE_DW       = False
+DEF_USE_BN       = False
 
-# 학습 기본값(환경에 맞게 조절 가능)
+# 학습 기본값
 DEF_EPOCHS   = 5
 DEF_BATCH    = 24
 DEF_WORKERS  = 2
 DEF_LR       = 1e-3
-DEF_USE_AMP  = True   # CUDA 사용시에만 활성됨(아래에서 자동 판단)
+DEF_USE_AMP  = True
 
-# 디바이스: 교사=CPU, 학생=CUDA(가능 시) / 여기서는 보통 CPU
 STUDENT_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 TEACHER_DEVICE = "cpu"
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD  = (0.229, 0.224, 0.225)
 
-# =====================
-# TinyMobileNet (학습 전용 정의)
-# =====================
+# k,s,g,BN/Act 여부를 매개변수로 받아 일반/Depthwise 합성 지원
 class ConvBNAct(nn.Module):
+    # (짧음) 합성곱 → (선택)BN → (선택)ReLU
     def __init__(self, in_ch, out_ch, k=3, s=1, g=1, act=True, use_bn=True):
         super().__init__()
         self.conv = nn.Conv2d(in_ch, out_ch, k, s, k//2, groups=g, bias=(not use_bn))
         self.bn   = nn.BatchNorm2d(out_ch) if use_bn else None
         self.act  = nn.ReLU(inplace=True) if act else nn.Identity()
+        
+    # 순전파
     def forward(self, x):
         x = self.conv(x)
         if self.bn is not None: x = self.bn(x)
         x = self.act(x)
         return x
 
+# expand → (depthwise/regular) → project, 조건부 shortcut
 class InvertedResidual(nn.Module):
+    # expand 비율·stride·depthwise 사용 여부에 따라 구성, 입력/출력 동일+stride=1이면 skip 연결
     def __init__(self, in_ch, out_ch, stride, expand, use_depthwise=True, use_bn=True):
         super().__init__()
         hidden = int(round(in_ch * expand))
@@ -93,10 +77,12 @@ class InvertedResidual(nn.Module):
             ConvBNAct(hidden, out_ch, k=1, s=1, act=False, use_bn=use_bn)
         ]
         self.block = nn.Sequential(*layers)
+    # 순전파
     def forward(self, x):
         out = self.block(x)
         return x + out if self.use_res else out
 
+# TinyMobileNet 변형
 class TinyMobileNet(nn.Module):
     def __init__(self, out_dim=DEF_EMBED_DIM, width=DEF_WIDTH_SCALE,
                  use_depthwise=DEF_USE_DW, use_bn=DEF_USE_BN):
@@ -117,6 +103,7 @@ class TinyMobileNet(nn.Module):
             if isinstance(m, nn.Conv2d): nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
             elif isinstance(m, nn.BatchNorm2d): nn.init.ones_(m.weight); nn.init.zeros_(m.bias)
         nn.init.normal_(self.fc.weight, 0, 0.01); nn.init.zeros_(self.fc.bias)
+    # 순전파: stem→blocks→head→GAP→FC
     def forward(self, x):
         x = self.stem(x)
         x = self.layer1(x); x = self.layer2(x)
@@ -125,34 +112,26 @@ class TinyMobileNet(nn.Module):
         x = self.head(x); x = self.pool(x).flatten(1)
         return self.fc(x)
 
-# =====================
-# 데이터셋 (3-view aware, shrink 미사용)
-# =====================
+# 파일명에서 뷰(c/lm/rm) 추론
 def _infer_view_from_name(p: str) -> str:
-    """파일명 접미사로 뷰 추정: '_c', '_lm', '_rm' (없으면 'c'로 간주)"""
     name = os.path.splitext(os.path.basename(p))[0].lower()
     if name.endswith("_lm"): return "lm"
     if name.endswith("_rm"): return "rm"
     if name.endswith("_c"):  return "c"
-    # 예전 데이터나 임의 파일명은 center로 취급
     return "c"
 
+# 루트 폴더에서 이미지 경로 재귀 수집
 def _list_images(root: Path):
     exts = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
     paths = []
     for ext in exts:
         paths += glob.glob(str(root / "**" / ("*"+ext)), recursive=True)
-    # 절대경로 + 유니크 + 정렬
     paths = sorted({os.path.abspath(p) for p in paths})
     return paths
 
+# c/lm/rm 분리→(선택)밸런싱→뷰별 증강 파이프라인 적용
+#   - 경로 스캔 → 뷰별 분할 → 밸런싱(최대개수 기준 오버샘플) → items 생성
 class ThreeViewImageDataset(Dataset):
-    """
-    - view-aware 증강:
-        center: RandomResizedCrop + RandomHorizontalFlip
-        mirror(lm, rm): RandomResizedCrop (수평플립 없음)
-    - balance_views: True면 c/lm/rm를 오버샘플링으로 균형 맞춤
-    """
     def __init__(self, root, size=128, balance_views=True):
         super().__init__()
         root = Path(root)
@@ -175,7 +154,7 @@ class ThreeViewImageDataset(Dataset):
             counts = {k: len(vs) for k, vs in self.view2paths.items()}
             maxc = max(counts.values()) if counts else 0
             for v, vs in self.view2paths.items():
-                if len(vs) == 0:  # 해당 뷰가 없으면 skip
+                if len(vs) == 0:
                     continue
                 rep = int(math.ceil(float(maxc) / float(len(vs))))
                 tmp = (vs * rep)[:maxc]
@@ -187,10 +166,9 @@ class ThreeViewImageDataset(Dataset):
                     self.items.append((p, v))
 
         if not self.items:
-            raise RuntimeError("유효한 학습 항목이 없습니다(뷰 분할/밸런싱 이후 비어있음).")
+            raise RuntimeError("유효한 학습 항목이 없습니다")
 
         # 증강(뷰별)
-        # NOTE: shrink 미사용, orientation 분포 보존 목적
         self.tf_center = transforms.Compose([
             transforms.RandomResizedCrop(size, scale=(0.7, 1.0), ratio=(0.95, 1.05)),
             transforms.RandomHorizontalFlip(p=0.5),
@@ -200,14 +178,15 @@ class ThreeViewImageDataset(Dataset):
         ])
         self.tf_mirror = transforms.Compose([
             transforms.RandomResizedCrop(size, scale=(0.7, 1.0), ratio=(0.95, 1.05)),
-            # 거울뷰: 수평 플립은 제거(분포 일치)
             transforms.ColorJitter(0.2, 0.2, 0.2, 0.1),
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ])
 
+    # 항목 수 반환
     def __len__(self): return len(self.items)
 
+    # 인덱스 샘플 로드 및 뷰별 증강 적용
     def __getitem__(self, idx):
         p, v = self.items[idx]
         with Image.open(p) as im:
@@ -217,7 +196,9 @@ class ThreeViewImageDataset(Dataset):
         else:
             return self.tf_mirror(im)
 
+# Resize→Normalize 후 텐서 반환
 class EvalImageFolder(Dataset):
+    # 초기화
     def __init__(self, root, size=128):
         root = Path(root)
         paths = _list_images(root)
@@ -230,16 +211,16 @@ class EvalImageFolder(Dataset):
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ])
         self.size = int(size)
+    # 항목 수
     def __len__(self): return len(self.paths)
+    # 인덱스 접근
     def __getitem__(self, idx):
         p = self.paths[idx]
         with Image.open(p) as im:
             im = im.convert("RGB")
         return self.tf(im)
 
-# =====================
-# Teacher / Student
-# =====================
+# Mnetv3_small(pretrained) → 실패 시 resnet18(pretrained) → 폴백
 def build_teacher_cpu(arch="mnetv3", local_weights=None):
     def try_load_pretrained_mnetv3():
         m = models.mobilenet_v3_small(pretrained=True)
@@ -254,9 +235,9 @@ def build_teacher_cpu(arch="mnetv3", local_weights=None):
     if arch == "mnetv3":
         try:
             m, tdim = try_load_pretrained_mnetv3()
-            print("[teacher] MobileNetV3-Small(pretrained) 사용 (1024-d)")
+            print("[teacher]-MobileNetV3-Small(pretrained) 사용 (1024-d)")
         except Exception as e:
-            print("[teacher] mobilenet_v3_small pretrained 실패:", repr(e))
+            print("[teacher]-MobileNetV3-Small(pretrained) 실패:", repr(e))
     if m is None:
         try:
             m, tdim = try_load_pretrained_resnet18()
@@ -274,42 +255,43 @@ def build_teacher_cpu(arch="mnetv3", local_weights=None):
                 m.fc = nn.Identity(); tdim = 512
             state = torch.load(str(local_weights), map_location="cpu")
             m.load_state_dict(state, strict=False)
-            print("[teacher] 로컬 가중치 로드 성공:", str(local_weights))
+            print("[teacher] 로컬 가중치 로드 성공", str(local_weights))
         except Exception as e:
-            print("[teacher] 로컬 가중치 로드 실패:", repr(e))
+            print("[teacher] 로컬 가중치 로드 실패", repr(e))
 
     if m is None:
         m = models.resnet18(pretrained=False)
         m.fc = nn.Identity()
         tdim = 512
-        print("[teacher] 경고: 비사전학습 ResNet18 사용(성능 저하 가능)")
+        print("[teacher] Warning - 비사전학습 ResNet18 사용")
 
     m.eval().to(TEACHER_DEVICE)
     for p in m.parameters():
         p.requires_grad_(False)
     return m, tdim
 
+# 학습 시 teacher feature를 out_dim으로 사상
 class StudentWithProj(nn.Module):
-    """Student(TinyMobileNet) + teacher feature projection(학습용). 저장 시엔 student만 저장."""
+    # 초기화
     def __init__(self, out_dim=DEF_EMBED_DIM, width=DEF_WIDTH_SCALE, tdim=1024,
                  use_depthwise=DEF_USE_DW, use_bn=DEF_USE_BN):
         super().__init__()
         self.student = TinyMobileNet(out_dim=out_dim, width=width,
                                      use_depthwise=use_depthwise, use_bn=use_bn)
         self.tproj = nn.Linear(tdim, out_dim, bias=False)
+    # 순전파
     def forward(self, x, tfeat):
         s = self.student(x)
         t = self.tproj(tfeat)
         return s, t
 
+# 코사인 증류 손실
 def cosine_distill_loss(s, t):
     s = F.normalize(s, dim=1)
     t = F.normalize(t, dim=1)
     return (1.0 - (s * t).sum(dim=1)).mean()
 
-# =====================
-# 평가(라벨 불필요)
-# =====================
+# 학생/교사(투영) 임베딩 일치도 평가: cos 평균/표준편차, NN@1 일치율 출력
 def evaluate_student(data_dir, model_student, proj_layer, teacher, device, teacher_device,
                      input_size=128, max_imgs=512, batch_size=32, workers=2):
     ds = EvalImageFolder(data_dir, size=input_size)
@@ -346,13 +328,11 @@ def evaluate_student(data_dir, model_student, proj_layer, teacher, device, teach
     print("[eval] mean cos(student, teacher-proj)=%.4f ± %.4f (n=%d)" % (cos_all.mean(), cos_all.std(), cos_all.size))
     print("[eval] NN@1 agreement(student vs teacher)=%.2f%%" % (agree * 100.0))
     if cos_all.mean() < 0.6:
-        print("[eval] note: 정렬이 낮습니다. 이미지 다양성↑, epoch↑, batch↑를 고려하세요.")
+        print("[eval] 정렬이 낮습니다. 이미지 다양성↑, epoch↑, batch↑를 고려하세요.")
     elif agree < 0.5:
-        print("[eval] note: 최근접 일치율이 낮습니다. 데이터 수/증강을 늘리거나 학습 파라미터를 조정하세요.")
+        print("[eval] 최근접 일치율이 낮습니다. 데이터 수/증강을 늘리거나 학습 파라미터를 조정하세요.")
 
-# =====================
-# ONNX Export (원본 모델 디바이스 보존: deepcopy 사용)
-# =====================
+# 학생 모델을 ONNX로 내보내기: deepcopy→CPU→eval→torch.onnx.export
 def export_student_to_onnx(model_student: nn.Module, onnx_path: Path, input_size: int, out_dim: int):
     # 원본을 건드리지 않기 위해 deepcopy → CPU → eval 후 export
     m = copy.deepcopy(model_student).to("cpu").eval()
@@ -366,9 +346,8 @@ def export_student_to_onnx(model_student: nn.Module, onnx_path: Path, input_size
     )
     print("[save] ONNX →", str(onnx_path))
 
-# =====================
-# 메인
-# =====================
+
+# 전체 실행 엔트리: 인자 파싱→데이터/로더→teacher/student 구성→(평가만|학습)→저장→(옵션)ONNX→간단평가
 def main():
     ap = argparse.ArgumentParser()
     # 평가 옵션
@@ -390,7 +369,7 @@ def main():
     ap.add_argument("--lr", type=float, default=DEF_LR)
     ap.add_argument("--no_amp", action="store_true")
 
-    # 구조 플래그(런타임과 동일해야 함)
+    # 구조 플래그
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--dw", dest="use_dw", action="store_true", help="depthwise conv 사용")
     g.add_argument("--no_dw", dest="use_dw", action="store_false", help="depthwise conv 미사용")
@@ -439,7 +418,7 @@ def main():
             print("[warn] 예상 tdim(%d) != 실제(%d) → 보정" % (tdim, infer_dim))
             tdim = infer_dim
 
-    # 학생(가능하면 CUDA)
+    # 학생
     device = STUDENT_DEVICE
     use_amp_flag = (device == "cuda" and (not args.no_amp) and DEF_USE_AMP)
     model = StudentWithProj(out_dim=args.out_dim, width=args.width, tdim=tdim,
