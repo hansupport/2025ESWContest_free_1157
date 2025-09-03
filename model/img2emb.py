@@ -1,22 +1,12 @@
-# img2emb.py (ONNXRuntime CPU-only, 3-view concat + mirror cache)
-# Jetson Nano: OpenCV CPU + ONNXRuntime
-#
-# 추가/변경 요약
-# - 3뷰(센터+좌/우 거울) 임베딩을 concat(256*3=768D)하는 Early-fusion(--concat3)
-# - 거울뷰 hflip 기본 적용, 배경 노이즈 완화용 shrink(기본 0.08)
-# - 실시간 모드 mirror 임베딩 캐시(--mirror_period N 프레임마다만 갱신)
-# - ROI 기본값: center(540x540,+103,-260), left(240x460,-380,-170,hflip), right(270x440,+630,-170,hflip)
-#
-# NOTE:
-# - PyTorch 옵션(--no_cudnn, --no_fp16, --channels_last, --pinned 등)은 하위호환 파싱만 하고 무시.
-# - 기존 단일 ROI 경로는 그대로 유지(기본 동작). --concat3로 3뷰 모드 활성화.
+# -3뷰 센터와 좌우 거울 임베딩을 concat 256x3으로 early fusion 활성화
+# - 실시간 모드에서 거울 임베딩 캐시를 두고 N 프레임마다만 갱신
 
 import os, sys, time, glob, csv, argparse, select
 from pathlib import Path
 import numpy as np
 import cv2
 
-# ===== ONNXRuntime =====
+# ONNXRuntime
 try:
     import onnxruntime as ort
 except Exception as e:
@@ -29,54 +19,57 @@ try:
 except Exception:
     pass
 
-# ========= 전역 기본값 =========
+# 전역 기본값
 PRETRAINED = True
-PRETRAINED_MODE = "onnx"               # 호환용 필드(미사용). onnx 고정.
+PRETRAINED_MODE = "onnx"              
 PRETRAINED_PATH = "mobilenetv3_small_emb.onnx"
 
 EMBED_DIM = 256
 INPUT_SIZE = 224
-WIDTH_SCALE = 1.0                      # 호환용(ONNX에서 미사용)
-USE_FP16 = False                       # 호환용(ONNX에서 미사용)
-CHANNELS_LAST = False                  # 호환용(ONNX에서 미사용)
+WIDTH_SCALE = 1.0
+USE_FP16 = False                 
+CHANNELS_LAST = False               
 FRAME_SKIP_N = 1
-CUDNN_BENCHMARK = False                # 호환용(ONNX에서 미사용)
-WARMUP_STEPS = 0                       # (batched images path에서만 의미)
-NO_DEPTHWISE = False                   # 호환용(ONNX에서 미사용)
-NO_BN = False                          # 호환용(ONNX에서 미사용)
-USE_PINNED = False                     # 호환용(ONNX에서 미사용)
+CUDNN_BENCHMARK = False          
+WARMUP_STEPS = 0                    
+NO_DEPTHWISE = False               
+NO_BN = False                       
+USE_PINNED = False          
 
-# ROI 기본값 (단일 ROI 경로용)
+# ROI 기본값  단일 ROI 경로용
 ROI = (280, 96, 288, 288)
 ROI_PX = None
 ROI_OFF = None
 
-# ---- 3뷰 기본 ROI (네가 제시한 값) ----
-# tuple: (w, h, dx, dy, hflip)
+# 3뷰 기본 ROI
+# tuple  w h dx dy hflip
 CENTER_DEFAULT = (540, 540, +103, -260, 0)
 LEFT_DEFAULT   = (240, 460, -380, -170, 1)
 RIGHT_DEFAULT  = (270, 440, +630, -170, 1)
 
-# ========= 시간/로그 =========
+# 시간/로그
 T0 = time.perf_counter()
 VERBOSE = False
 TIME_LOG = True
 PROFILE = False
-GARGS = None  # 전역 접근용 파싱 결과
+GARGS = None  
 
+# 로깅 유틸  verbose일 때 경과시간 포함 출력
 def vlog(msg: str):
     if VERBOSE:
         if TIME_LOG: print(f"[{time.perf_counter()-T0:7.3f}s] {msg}", flush=True)
         else:        print(msg, flush=True)
 
-# ========= 전처리 =========
+# 전처리
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
+# L2 정규화 수행
 def l2_normalize(x, eps=1e-12):
     n = np.linalg.norm(x, ord=2, axis=-1, keepdims=True)
     return x / (n + eps)
 
+# 안전한 사각형 크롭 
 def _safe_crop_xywh(img, x, y, w, h):
     H, W = img.shape[:2]
     x2, y2 = x + w, y + h
@@ -86,6 +79,7 @@ def _safe_crop_xywh(img, x, y, w, h):
         raise ValueError(f"ROI out of bounds: img=({W}x{H}), roi={(x,y,w,h)}")
     return img[y:y2, x:x2]
 
+# 중심과 오프셋 기준으로 ROI 좌표 계산
 def _compute_center_roi_xy(img, px_wh, off_xy):
     H, W = img.shape[:2]
     rw, rh = map(int, px_wh)
@@ -98,6 +92,7 @@ def _compute_center_roi_xy(img, px_wh, off_xy):
     y = max(0, min(H - rh, cy - rh // 2))
     return x, y, rw, rh
 
+# ROI를 shrink 비율만큼 안쪽으로 줄이기
 def _shrink_xywh(x, y, w, h, shrink=0.0):
     if shrink <= 0:
         return x, y, w, h
@@ -108,22 +103,24 @@ def _shrink_xywh(x, y, w, h, shrink=0.0):
     w, h = max(1, x2 - x), max(1, y2 - y)
     return x, y, w, h
 
+# 절대 ROI가 주어지면 해당 영역 크롭
 def safe_crop(img, roi):
     if roi is None:
         return img
     x, y, w, h = map(int, roi)
     return _safe_crop_xywh(img, x, y, w, h)
 
+# RGB 전처리
 def _preprocess_rgb_chw(img_rgb, size=INPUT_SIZE):
     if (img_rgb.shape[1], img_rgb.shape[0]) != (size, size):
         img_rgb = cv2.resize(img_rgb, (size, size), interpolation=cv2.INTER_AREA)
     img = img_rgb.astype(np.float32) / 255.0
     img = (img - IMAGENET_MEAN) / IMAGENET_STD
     img = np.transpose(img, (2, 0, 1))
-    return np.expand_dims(img, 0).astype(np.float32)  # [1,3,H,W]
+    return np.expand_dims(img, 0).astype(np.float32)
 
+# BGR 입력을 ROI 처리 후 RGB 전처리 수행
 def preprocess_bgr(img_bgr, size=INPUT_SIZE):
-    # ROI 우선순위: 중심기준(ROI_PX/ROI_OFF) → 절대좌표(ROI) → 전체
     if ROI_PX is not None and ROI_OFF is not None:
         x, y, w, h = _compute_center_roi_xy(img_bgr, ROI_PX, ROI_OFF)
         img = _safe_crop_xywh(img_bgr, x, y, w, h)
@@ -134,6 +131,7 @@ def preprocess_bgr(img_bgr, size=INPUT_SIZE):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     return _preprocess_rgb_chw(img, size=size)
 
+# 중심기준 ROI와 shrink hflip 옵션으로 전처리 수행
 def preprocess_bgr_with_center_roi(img_bgr, px_wh, off_xy, hflip=False, size=INPUT_SIZE, shrink=0.0):
     x, y, w, h = _compute_center_roi_xy(img_bgr, px_wh, off_xy)
     x, y, w, h = _shrink_xywh(x, y, w, h, shrink=shrink)
@@ -143,17 +141,20 @@ def preprocess_bgr_with_center_roi(img_bgr, px_wh, off_xy, hflip=False, size=INP
     rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
     return _preprocess_rgb_chw(rgb, size=size)
 
+# 파일 경로에서 BGR 이미지 읽기
 def imread_bgr(path):
     data = np.fromfile(path, dtype=np.uint8)
     img = cv2.imdecode(data, cv2.IMREAD_COLOR)
     if img is None: img = cv2.imread(str(path), cv2.IMREAD_COLOR)
     return img
 
+# 글롭 패턴들에서 이미지 경로 수집
 def list_images(patterns):
     paths = []
     for pat in patterns: paths.extend(glob.glob(pat))
     return sorted({p for p in paths if p.lower().endswith((".jpg",".jpeg",".png",".bmp",".webp"))})
 
+# 임베딩 행렬과 인덱스 CSV 저장
 def save_matrix_and_index(pairs, out_dir):
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     embs = [e for _, e in pairs if e is not None]
@@ -166,14 +167,14 @@ def save_matrix_and_index(pairs, out_dir):
         for i, n in enumerate(names): w.writerow([i, n])
     print("저장 완료:", out / "embeddings.npy", ",", out / "index.csv")
 
-# ========= ONNX Embedder =========
+# ONNXRuntime 세션을 생성하고 단일 배치, 또는 배치 입력의 임베딩을 추출하는 래퍼 클래스
 class OnnxEmbedder:
     def __init__(self, onnx_path, size=INPUT_SIZE, out_dim=EMBED_DIM):
         if not onnx_path or not os.path.exists(onnx_path):
             raise FileNotFoundError(f"ONNX 파일이 없습니다: {onnx_path}")
         self.size = int(size)
         so = ort.SessionOptions()
-        so.intra_op_num_threads = 1  # Jetson Nano: 과도한 스레드 방지
+        so.intra_op_num_threads = 1 
         self.session = ort.InferenceSession(
             onnx_path,
             sess_options=so,
@@ -183,17 +184,19 @@ class OnnxEmbedder:
         self.out = self.session.get_outputs()[0].name
         self.out_dim = int(out_dim)
 
+    # 내부 추론 실행
     def _run(self, X: np.ndarray) -> np.ndarray:
-        y = self.session.run([self.out], {self.inp: X})[0]  # [N,D]
+        y = self.session.run([self.out], {self.inp: X})[0]
         return y
 
+    # 단일 이미지 BGR에서 전처리 후 추론과 L2 정규화 수행
     def embed_bgr(self, img_bgr: np.ndarray) -> np.ndarray:
         t0 = time.perf_counter()
-        X = preprocess_bgr(img_bgr, size=self.size)                # [1,3,H,W]
+        X = preprocess_bgr(img_bgr, size=self.size)
         t1 = time.perf_counter()
-        f = self._run(X)                                           # [1,D]
+        f = self._run(X)
         t2 = time.perf_counter()
-        v = l2_normalize(f[0])                                     # [D]
+        v = l2_normalize(f[0])
         t3 = time.perf_counter()
 
         if PROFILE:
@@ -205,12 +208,13 @@ class OnnxEmbedder:
                   flush=True)
         return v.astype(np.float32)
 
+    # 여러 배치 입력을 한 번에 추론하고 L2 정규화 수행
     def embed_batch_np(self, batch_np) -> np.ndarray:
-        X = np.concatenate(batch_np, 0)            # [N,3,H,W]
-        f = self._run(X)                            # [N,D]
-        return l2_normalize(f).astype(np.float32)   # [N,D]
+        X = np.concatenate(batch_np, 0)
+        f = self._run(X)
+        return l2_normalize(f).astype(np.float32)
 
-# ========= ROI 유틸: 중심기준 세터 =========
+# 중심기준 ROI 전역 설정
 def set_center_roi(px_wh, offset_xy):
     global ROI_PX, ROI_OFF, ROI
     ROI_PX = tuple(map(int, px_wh)) if px_wh is not None else None
@@ -219,14 +223,13 @@ def set_center_roi(px_wh, offset_xy):
         ROI = None
     vlog(f"set_center_roi px={ROI_PX} off={ROI_OFF}")
 
-# ========= Embedder factory =========
+# 플래그 기반 임베더 생성
 def build_embedder_from_flags():
     if not PRETRAINED:
         raise RuntimeError("--pretrained=1 과 --pretrained_path=<onnx> 를 지정하세요.")
     return OnnxEmbedder(PRETRAINED_PATH, size=INPUT_SIZE, out_dim=EMBED_DIM)
 
-# ========= 3뷰 임베딩 유틸 =========
-# views tuple: (w, h, dx, dy, hflip, shrink)
+# 인자에서 3개 뷰 ROI와 옵션을 구성
 def build_3view_rois_from_args(args):
     c_w, c_h, c_dx, c_dy, c_hf = CENTER_DEFAULT
     l_w, l_h, l_dx, l_dy, l_hf = LEFT_DEFAULT
@@ -251,42 +254,42 @@ def build_3view_rois_from_args(args):
         (r_w, r_h, r_dx, r_dy, r_hf, sh_mirror),
     ]
 
+# 세 뷰를 모두 신규 추출해 L2 정규화 후 블록 스케일로 결합
 def embed_3view_concat(emb, img_bgr, views, block_scale=True):
     batch = []
     for (w,h,dx,dy,hf,sh) in views:
         X = preprocess_bgr_with_center_roi(img_bgr, (w,h), (dx,dy), hflip=bool(hf), size=emb.size, shrink=float(sh))
         batch.append(X)
-    feats = emb.embed_batch_np(batch)  # [3, D], each L2-normalized
+    feats = emb.embed_batch_np(batch)  # [3 D]
     if block_scale:
-        feats = feats / np.sqrt(len(views))  # keep overall L2 around 1
-    return feats.reshape(-1).astype(np.float32)  # [3*D]
+        feats = feats / np.sqrt(len(views))
+    return feats.reshape(-1).astype(np.float32)
 
-class MirrorCache:
-    def __init__(self):
-        self.left = None
-        self.right = None
-        self.frame_idx = -1
-
-def embed_concat_cached(emb, img_bgr, views, cache: MirrorCache, frame_idx: int, mirror_period: int = 3, block_scale=True):
-    # views: [center, left, right]
+# 좌우 거울 임베딩을 캐시에 저장해 주기적으로만 갱신
+def embed_concat_cached(emb, img_bgr, views, cache: "MirrorCache", frame_idx: int, mirror_period: int = 3, block_scale=True):
     (cw,ch,cdx,cdy,chf,csh), (lw,lh,ldx,ldy,lhf,lsh), (rw,rh,rdx,rdy,rhf,rsh) = views
-    # center always fresh
     Xc = preprocess_bgr_with_center_roi(img_bgr, (cw,ch), (cdx,cdy), hflip=bool(chf), size=emb.size, shrink=float(csh))
-    # refresh mirror only every N frames
     need_refresh = (cache.left is None or cache.right is None or (frame_idx % max(1, mirror_period) == 0))
     if need_refresh:
         Xl = preprocess_bgr_with_center_roi(img_bgr, (lw,lh), (ldx,ldy), hflip=bool(lhf), size=emb.size, shrink=float(lsh))
         Xr = preprocess_bgr_with_center_roi(img_bgr, (rw,rh), (rdx,rdy), hflip=bool(rhf), size=emb.size, shrink=float(rsh))
-        feats = emb.embed_batch_np([Xl, Xr])  # [2,D]
+        feats = emb.embed_batch_np([Xl, Xr])
         cache.left, cache.right = feats[0], feats[1]
         cache.frame_idx = frame_idx
     fc = emb.embed_batch_np([Xc])[0]
     stack = np.vstack([fc, cache.left, cache.right])
     if block_scale:
         stack = stack / np.sqrt(3.0)
-    return stack.reshape(-1).astype(np.float32)  # [768]
+    return stack.reshape(-1).astype(np.float32)
 
-# ========= 카메라 =========
+# 캐시 구조체
+class MirrorCache:
+    def __init__(self):
+        self.left = None
+        self.right = None
+        self.frame_idx = -1
+
+# GStreamer 파이프라인 문자열 구성
 def build_gst_pipeline(dev, w=None, h=None, fps=None, pixfmt="YUYV"):
     parts=[f"v4l2src device={dev} io-mode=2"]
     if pixfmt and pixfmt.upper()=="MJPG":
@@ -307,6 +310,7 @@ def build_gst_pipeline(dev, w=None, h=None, fps=None, pixfmt="YUYV"):
     parts += ["! videoconvert", "! appsink"]
     return " ".join(parts)
 
+# 카메라 열기 (V4L2 시도, 실패 시 GStreamer로 대체)
 def open_camera(cam, backend="auto", w=None, h=None, fps=None, pixfmt="YUYV"):
     if isinstance(cam, str) and not cam.isdigit() and ("v4l2src" in cam or "nvarguscamerasrc" in cam):
         vlog("[cam] using provided GStreamer pipeline")
@@ -331,12 +335,13 @@ def open_camera(cam, backend="auto", w=None, h=None, fps=None, pixfmt="YUYV"):
     vlog(f"[cam] try GStreamer: {gst}")
     return cv2.VideoCapture(gst, cv2.CAP_GSTREAMER)
 
-# ========= 유틸 =========
+# 표준입력에서 논블록으로 한 줄 읽기
 def stdin_readline_nonblock(timeout_sec=0.1):
     r,_,_ = select.select([sys.stdin], [], [], timeout_sec)
     if r: return sys.stdin.readline().strip()
     return None
 
+# 임베딩 요약 출력
 def print_embed(v, ms=None, print_k=8):
     l2 = float(np.linalg.norm(v))
     head = np.round(v[:max(0,print_k)], 4) if print_k>0 else np.array([])
@@ -345,6 +350,7 @@ def print_embed(v, ms=None, print_k=8):
     else:
         print(f"shape={v.shape}, L2={l2:.6f}, time_ms={ms:.1f}, first{print_k}={head}", flush=True)
 
+# 현재 카메라 프레임에서 ROI 사각형들을 그려 저장
 def roi_snapshot_from_cap(cap, out_path="ROI_snapshot.jpg", annotate=True):
     if not cap or not cap.isOpened():
         print("[roi_snap] 카메라 열기 실패", file=sys.stderr); return False
@@ -381,6 +387,7 @@ def roi_snapshot_from_cap(cap, out_path="ROI_snapshot.jpg", annotate=True):
     print(f"[roi_snap] 저장 완료: {out_path}")
     return True
 
+# 환경 진단 정보 출력
 def diag_env():
     print("[env]", "onnxruntime:", ort.__version__)
     try:
@@ -390,6 +397,7 @@ def diag_env():
     print("[env]", "cv2:", cv2.__version__)
     print("[env]", "ROI_XYWH:", ROI, "ROI_CENTER(px/off):", ROI_PX, ROI_OFF)
 
+# 헤드리스 FPS 측정
 def diag_fps_headless(emb, cap, frames=60):
     if not cap or not cap.isOpened():
         print("[fps] 카메라 열기 실패", file=sys.stderr); return
@@ -412,7 +420,8 @@ def diag_fps_headless(emb, cap, frames=60):
     mode = "concat3" if views is not None else "single"
     print(f"[fps] frames={n}, mode={mode}, avg_fps={fps:.2f} (FRAME_SKIP_N={FRAME_SKIP_N})", flush=True)
 
-# ========= E2E 워밍업 =========
+
+# 카메라 기반 엔드투엔드 워밍업 실행
 def e2e_warmup(emb, cap, n=30, pregrab=5):
     if not cap or not cap.isOpened() or n <= 0: return
     for _ in range(max(0, pregrab)):
@@ -434,7 +443,7 @@ def e2e_warmup(emb, cap, n=30, pregrab=5):
     dt = (time.perf_counter()-t0)/max(1,cnt)
     print(f"[warmup] e2e frames={cnt}, avg_ms={dt*1000:.1f}", flush=True)
 
-# ========= 데모 =========
+# 수동 모드
 def manual_demo_headless(emb, cap, args, print_k=8, save_npy=None, save_img=None):
     if not cap or not cap.isOpened():
         print("카메라/비디오 열기 실패", file=sys.stderr); return
@@ -465,6 +474,7 @@ def manual_demo_headless(emb, cap, args, print_k=8, save_npy=None, save_img=None
                 ts = time.strftime("%Y%m%d_%H%M%S")
                 cv2.imwrite(str(Path(save_img) / f"img_{ts}.jpg"), bgr)
 
+# 단발 추론
 def oneshot(emb, cap, args, print_k=8, save_npy=None, save_img=None):
     if not cap or not cap.isOpened():
         print("카메라/비디오 열기 실패", file=sys.stderr); return
@@ -488,6 +498,7 @@ def oneshot(emb, cap, args, print_k=8, save_npy=None, save_img=None):
         ts = time.strftime("%Y%m%d_%H%M%S")
         cv2.imwrite(str(Path(save_img) / f"img_{ts}.jpg"), bgr)
 
+# 실시간 헤드리스 루프
 def realtime_demo_headless(emb, cap, args, print_every=30):
     if not cap or not cap.isOpened():
         print("카메라/비디오 열기 실패", file=sys.stderr); return
@@ -511,7 +522,7 @@ def realtime_demo_headless(emb, cap, args, print_every=30):
             mode = "concat3" if views is not None else "single"
             print(f"fps≈{fps:.2f} ({mode})", flush=True)
 
-# ========= CLI =========
+# 엔트리 포인트 
 def main():
     global PRETRAINED, PRETRAINED_MODE, PRETRAINED_PATH
     global INPUT_SIZE, EMBED_DIM, WIDTH_SCALE, USE_FP16, CHANNELS_LAST, FRAME_SKIP_N
@@ -555,16 +566,16 @@ def main():
     ap.add_argument("--cam_h", type=int, default=None)
     ap.add_argument("--cam_fps", type=int, default=None)
     ap.add_argument("--cam_pixfmt", type=str, default="YUYV", help="YUYV|MJPG|AUTO")
-    # ROI 옵션(단일 ROI 경로)
+    # ROI 옵션  단일 ROI 경로
     ap.add_argument("--roi", type=int, nargs=4, default=None, help="절대좌표 ROI: x y w h")
     ap.add_argument("--roi_px", type=int, nargs=2, default=None, help="중심기준 ROI 폭높이: w h")
     ap.add_argument("--roi_off", type=int, nargs=2, default=None, help="중심기준 ROI 오프셋: dx dy")
     # 3뷰 concat 옵션
-    ap.add_argument("--concat3", action="store_true", help="3뷰(센터+좌/우 거울) 임베딩을 concat(768D)으로 출력")
+    ap.add_argument("--concat3", action="store_true", help="3뷰 센터와 좌우 거울 임베딩을 concat 768D로 출력")
     ap.add_argument("--mirror_period", type=int, default=3, help="realtime에서 거울 임베딩 갱신 주기 프레임")
     ap.add_argument("--use_mirror_cache", action="store_true", help="realtime에서 거울 캐시 사용")
     ap.add_argument("--no_mirror_cache", action="store_true", help="realtime에서 거울 캐시 비활성화")
-    ap.add_argument("--mirror_shrink", type=float, default=0.08, help="거울뷰 ROI shrink 비율(0~0.3 권장)")
+    ap.add_argument("--mirror_shrink", type=float, default=0.08, help="거울뷰 ROI shrink 비율 0에서 0.3 권장")
     ap.add_argument("--center_shrink", type=float, default=0.00, help="센터뷰 ROI shrink 비율")
     # 각 뷰 ROI 오버라이드
     ap.add_argument("--center_px", type=int, nargs=2, default=None)
@@ -590,15 +601,13 @@ def main():
     ap.add_argument("--pregrab", type=int, default=5, help="워밍업 전에 grab만 수행할 프레임 수")
 
     args = ap.parse_args()
-    GARGS = args  # 전역 저장
+    GARGS = args
 
-    # mirror cache toggle 정리
     if args.no_mirror_cache:
         args.use_mirror_cache = False
     elif args.use_mirror_cache:
         args.use_mirror_cache = True
     else:
-        # 기본값: concat3면 True, 아니면 무의미
         args.use_mirror_cache = True if args.concat3 else False
 
     # 전역에 반영
@@ -620,11 +629,11 @@ def main():
     NO_BN = bool(args.no_bn)
     USE_PINNED = bool(args.pinned)
 
-    # 무시 옵션 경고
+    # 무시 옵션 경고 안내
     if args.no_cudnn or args.channels_last or args.no_fp16 or args.no_depthwise or args.no_bn or args.pinned:
         vlog("[warn] 일부 PyTorch 전용 옵션은 ONNXRuntime 경로에서 무시됩니다.")
 
-    # ROI 파싱(단일 ROI 경로용)
+    # ROI 파싱
     if args.roi_px is not None and args.roi_off is not None:
         set_center_roi(args.roi_px, args.roi_off)
     elif args.roi is not None:
@@ -662,7 +671,7 @@ def main():
 
     if args.images:
         paths = list_images(args.images)
-        t0 = time.perf_counter(); pairs=[]; 
+        t0 = time.perf_counter(); pairs=[]
         for p in paths:
             img = imread_bgr(p)
             if img is None:
@@ -670,9 +679,9 @@ def main():
             try:
                 if args.concat3:
                     views = build_3view_rois_from_args(args)
-                    v = embed_3view_concat(emb, img, views, block_scale=True)  # [768]
+                    v = embed_3view_concat(emb, img, views, block_scale=True)
                 else:
-                    v = emb.embed_bgr(img)  # [256]
+                    v = emb.embed_bgr(img)
                 pairs.append((p, v))
             except Exception as e:
                 print(f"전처리/임베딩 실패 - {p} | {e}", file=sys.stderr); pairs.append((p,None))
