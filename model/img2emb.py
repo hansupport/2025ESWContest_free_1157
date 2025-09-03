@@ -1,4 +1,4 @@
-# -3뷰 센터와 좌우 거울 임베딩을 concat 256x3으로 early fusion 활성화
+# - 3뷰 센터와 좌우 거울 임베딩을 concat 128x3으로 early fusion 활성화
 # - 실시간 모드에서 거울 임베딩 캐시를 두고 N 프레임마다만 갱신
 
 import os, sys, time, glob, csv, argparse, select
@@ -24,7 +24,7 @@ PRETRAINED = True
 PRETRAINED_MODE = "onnx"              
 PRETRAINED_PATH = "mobilenetv3_small_emb.onnx"
 
-EMBED_DIM = 256
+EMBED_DIM = 128
 INPUT_SIZE = 224
 WIDTH_SCALE = 1.0
 USE_FP16 = False                 
