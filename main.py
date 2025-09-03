@@ -1,4 +1,12 @@
 # main.py — DM 퍼시스턴트 핸들에서 스냅샷 캡처(동일 디바이스 busy 해결) + 메모리 서빙 + 캡처 이미지 UI 전달
+# 목적: RGB/Depth 캡처 → DataMatrix 스캔 → (라벨 유효 시) 추론 생략 → (라벨 없으면) 임베딩/추론 → 뽁뽁이 길이 계산 → UI/시리얼 커팅 제어
+# 흐름: init → 장치/모델 준비 → 웹 UI 시작 → 펌프/버스트 → 이벤트 루프(D/아두이노 신호) → clean shutdown
+# 입출력: 입력=RealSense D435, Arduino(스캐너/커터), config.{yaml,json} / 출력=/api/state, /api/capture.jpg, /imgfile/*
+# 의존: OpenCV, Flask, Waitress, NumPy, pyserial
+# 엔드포인트: GET / (정적 UI), /api/state(상태 JSON), /api/capture.jpg(메모리 JPEG), /api/params(파라미터 설정)
+# 환경: UI_HOST/UI_PORT/UI_THREADS, BUBBLE_ROLL_WIDTH_MM, IDLE_PUMP_FPS, BURST_FLUSH_N/BURST_FLUSH_TO_MS, CAPTURE_*
+# 보안(SECURITY): 기본적으로 LAN 가정. WAN 노출 시 역프록시/인증 계층 필요.
+# 성능(PERF): DM 퍼시스턴트 핸들 재사용 + ROI 크롭 + 버스트 플러시로 지연 최소화.
 
 import sys
 import time
@@ -12,21 +20,21 @@ from typing import Optional
 import cv2
 import math
 
-# ---- Serial (아두이노 연동용) ----
+# ---- Serial / 아두이노 연동용 ----
 HAVE_SERIAL = True
 try:
     import serial
 except ImportError:
     HAVE_SERIAL = False
 
-# ---- Flask (선택적) ----
+# ---- Flask 가용성 체크 ----
 HAVE_FLASK = True
 try:
     from flask import Flask, jsonify, request, make_response, send_from_directory
 except Exception:
     HAVE_FLASK = False
 
-# ---- Waitress (선택적) ----
+# ---- Waitress 가용성 체크----
 HAVE_WAITRESS = True
 try:
     from waitress import serve as _waitress_serve
@@ -41,10 +49,10 @@ MODEL_DIR = ROOT / "model"
 if str(MODEL_DIR) not in sys.path:
     sys.path.insert(0, str(MODEL_DIR))
 
-# ★ 웹 자산 디렉터리(고정)
+# ---- 웹 디렉터리(고정) ----
 WEB_DIR = ROOT / "web"  # web/index.html, web/style.css, web/script.js
 
-# ---- 뽁뽁이 롤 폭(mm) ----
+# ---- 뽁뽁이 롤 폭(200mm) ----
 ROLL_WIDTH_MM = int(os.getenv("BUBBLE_ROLL_WIDTH_MM", "200"))
 
 # ---- 로컬 모듈 ----
@@ -63,9 +71,8 @@ from core.utils import (
     same_device,
 )
 
-# ---- DM 프레임 읽기(퍼시스턴트 핸들에서) ----
+# ---- DM 프레임 읽기 ----
 try:
-    # 이 함수는 cam(카메라 객체)을 인자로 받음
     from datamatrix import read_frame_nonblocking as dm_read_frame
 except Exception:
     dm_read_frame = None  # 폴백 경로만 사용
@@ -97,21 +104,21 @@ _UI_STATE = {
     "p": None,  # top-1 prob
     "status": None,  # "analyzing" | "done" | "paused" | "error" | None
     "updated_ts": None,
-    "warn_msg": None,  # p<0.55 경고
+    "warn_msg": None,
     "params": {
         "layers": 2,
         "overlap_mm": 120,
         "slack_ratio": 0.03,
         "round_to_mm": 10,
     },
-    # === 추가 ===
-    "cap_image": None,   # 캡처 표시 마커: "__mem__" 또는 파일명
-    "event_id": None,    # 스캔 이벤트 ID(히스토리 dedupe)
+    "cap_image": None,
+    "event_id": None,
 }
 
-# 최신 캡처 JPEG 바이트 (메모리 서빙)
+# 최신 캡처된 JPEG (디스크 저장 없이) 메모리에서 응답
 _CAP_JPEG: Optional[bytes] = None
 
+# 최신 캡처 이미지 메모리에 저장, 프론트에 마커 세팅
 def _set_cap_jpeg(jpeg_bytes: Optional[bytes]):
     global _CAP_JPEG
     with _UI_LOCK:
@@ -119,26 +126,31 @@ def _set_cap_jpeg(jpeg_bytes: Optional[bytes]):
         _UI_STATE["cap_image"] = "__mem__" if jpeg_bytes else None
         _UI_STATE["updated_ts"] = int(time.time())
 
+# 정수로 반환(올림)
 def _round_up(x, base):
     if base <= 0:
         return int(x)
     return int(math.ceil(float(x) / float(base)) * base)
 
+# 타임스탬프 갱신
 def _touch_ts():
     with _UI_LOCK:
         _UI_STATE["updated_ts"] = int(time.time())
 
+# 타입 id와 물체 이름을 ui에 반영
 def _set_ui_type(tid: Optional[str]):
     with _UI_LOCK:
         _UI_STATE["type_id"] = tid
         _UI_STATE["type_name"] = type_name_from_id(tid) if tid else None
         _UI_STATE["updated_ts"] = int(time.time())
 
+# 경고 메시지(추정 확률이 40프로 이하일 시) 표시
 def _set_warn(msg=None):
     with _UI_LOCK:
         _UI_STATE["warn_msg"] = msg if msg else None
         _UI_STATE["updated_ts"] = int(time.time())
 
+# top-1 확률 p 설정
 def _set_prob(pval, touch=True):
     with _UI_LOCK:
         try:
@@ -147,25 +159,27 @@ def _set_prob(pval, touch=True):
             _UI_STATE["p"] = None
         if touch:
             _UI_STATE["updated_ts"] = int(time.time())
-
+                
+# 현재 상태 설정 (analyzing/ done/ paused/ error/ None)
 def _set_status(s: Optional[str], touch=True):
     with _UI_LOCK:
         _UI_STATE["status"] = s
         if touch:
             _UI_STATE["updated_ts"] = int(time.time())
 
+# 스캔의 고유 id 박음(프론트 히스토리 중복 방지)
 def _set_event_id(eid: int):
     with _UI_LOCK:
         _UI_STATE["event_id"] = int(eid)
         _UI_STATE["updated_ts"] = int(time.time())
 
+# 프론트에 보여줄 이미지 지정
 def _set_cap_image(fname: Optional[str]):
-    # "__mem__" 마커 또는 파일명 또는 None
     with _UI_LOCK:
         _UI_STATE["cap_image"] = fname if fname else None
         _UI_STATE["updated_ts"] = int(time.time())
 
-# ---- 기본 계산식(라벨 없음) : 방향 최적화 ----
+# ----  기본 계산식 (방향 최적화) ----
 def compute_bubble_length_mm(
     W, L, H, layers=None, overlap_mm=None, slack_ratio=None, round_to_mm=None, roll_width_mm: Optional[int] = None,
 ):
@@ -191,6 +205,7 @@ def compute_bubble_length_mm(
             best = total
     return int(best)
 
+# W,L,H를 ui에 넣고, 방향 최적화 계산으로 세팅팅
 def _set_ui_dims_and_bubble(w_mm, l_mm, h_mm):
     bubble_mm = compute_bubble_length_mm(w_mm, l_mm, h_mm)
     with _UI_LOCK:
@@ -202,7 +217,7 @@ def _set_ui_dims_and_bubble(w_mm, l_mm, h_mm):
 
 # ---- 16자리 라벨 파싱 ----
 def parse_dm_label_16(s):
-    """[0:6]=type_id, [6:9]=W, [9:12]=L, [12:15]=H, [15]=wrap_layers"""
+    """[0:6]=물체 종류, [6:9]=너비, [9:12]=길이, [12:15]=높이, [15]=랩 포장 바퀴수"""
     if s is None:
         return None
     s = str(s).strip()
@@ -220,6 +235,7 @@ def parse_dm_label_16(s):
     except Exception:
         return None
 
+# 주어진 사이즈에 대해 최소 뽁뽁이 길이 계산 
 def compute_bubble_length_perimeter_layers_oriented(W, L, H, layers, roll_width_mm: Optional[int] = None):
     roll_width = ROLL_WIDTH_MM if roll_width_mm is None else int(roll_width_mm)
     try:
@@ -241,6 +257,7 @@ def compute_bubble_length_perimeter_layers_oriented(W, L, H, layers, roll_width_
             best = total
     return int(best)
 
+# dm 라벨을 파싱해 종류/ 사이즈/ 뽁뽁이 길이 ui에 표시
 def _set_ui_from_label(s):
     info = parse_dm_label_16(s)
     if info is None:
@@ -353,7 +370,6 @@ if HAVE_FLASK:
 
     @_APP.route("/api/capture.jpg")
     def api_capture_jpeg():
-        # 최신 캡처 JPEG을 메모리에서 그대로 반환
         with _UI_LOCK:
             data = _CAP_JPEG
         if not data:
@@ -365,6 +381,7 @@ if HAVE_FLASK:
         resp.headers["Expires"] = "0"
         return resp
 
+# web ui 런처
 def _start_web_ui():
     if not HAVE_FLASK:
         print("[ui] Flask가 설치되어 있지 않아 UI를 비활성화합니다. (pip install Flask)")
@@ -387,8 +404,9 @@ def _start_web_ui():
             _APP.run(**kwargs)
     th = threading.Thread(target=_run, daemon=True)
     th.start()
-    print(f"[ui] 웹 UI 실행: http://<Jetson_IP>:{port} (iPad/Safari 가능)")
+    print(f"[ui] 웹 UI 실행: http://<Jetson_IP>:{port}")
 
+# 모델 학습
 def run_training_now(config_path: Optional[Path], force_type: Optional[str]):
     train_py = (MODEL_DIR / "model" / "train.py" if (MODEL_DIR / "model" / "train.py").exists() else MODEL_DIR / "train.py")
     args = [sys.executable, str(train_py)]
@@ -530,14 +548,11 @@ def _extract_vcap_from_dm_handle(dm_handle):
 # 캡처 유틸 (스캔 직전: DM 핸들 우선, 메모리 서빙)
 # =======================
 def _capture_rgb_snapshot_quick(
-    S, dm_handle, save_dir: Path, event_id: int, rois_for_capture=None
-) -> Optional[str]:
+    S, dm_handle, save_dir: Path, event_id: int, rois_for_capture=None) -> Optional[str]:
     """
-    1) DM 퍼시스턴트 핸들에서 프레임 확보(동일 디바이스 재오픈 금지)
-    2) 실패 시 DM/EMB가 '다른' 디바이스일 때만 임베딩 장치로 폴백
-    3) 확보된 프레임을 '고정 ROI(520x550, dx=+90, dy=-160)'으로 자른 뒤 JPEG 인코딩
-    결과물: 메모리 보관(_CAP_JPEG) 및 "__mem__" 마커 리턴
-           환경변수 CAPTURE_TO_DISK=1 이면 save_dir에도 백업 저장
+    - DM 퍼시스턴트 핸들에서 프레임 확보(동일 디바이스 재오픈 금지)
+    - 실패 시 DM/EMB가 '다른' 디바이스일 때만 임베딩 장치로 폴백
+    - 확보된 프레임을 '고정 ROI(520x550, dx=+90, dy=-160)'으로 자른 뒤 JPEG 인코딩
     """
     CAPTURE_NAME = os.getenv("CAPTURE_NAME", "capture.jpg")
     CAPTURE_TO_DISK = int(os.getenv("CAPTURE_TO_DISK", "0"))  # 1이면 디스크에도 저장
@@ -623,7 +638,7 @@ def _capture_rgb_snapshot_quick(
         jpeg_bytes = buf.tobytes()
         _set_cap_jpeg(jpeg_bytes)
 
-        # 필요 시만 디스크에도 백업 저장 (기본값 비활성)
+        # 필요 시만 디스크에도 백업 저장 (기본값: 비활성)
         if CAPTURE_TO_DISK:
             fpath = save_dir / CAPTURE_NAME
             try:
