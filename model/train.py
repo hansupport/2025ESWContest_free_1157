@@ -1,12 +1,8 @@
-# train.py (Py3.6 호환 / sklearn 미사용 / 진행률 % 출력 / 피클 없이 저장되는 centroid + LGBM NPZ 백업)
-# - YAML/JSON 설정 로딩(--config)
-# - SQLite(sample_log)에서 has_label=1 로드
-# - 15 스칼라 + emb → L2 정규화 벡터  ← DB의 실제 임베딩 차원 자동 감지(128/384 혼재 안전)
-# - model.type: "centroid" or "lgbm"
-# - LGBM: (옵션) 하이퍼파라미터 그리드 서치 + lightgbm.train + early_stopping + 진행률(%) 콜백
-# - 저장:
-#     * centroid: NPZ (labels를 'U128' 문자열로 변환)  => allow_pickle=False OK
-#     * lgbm: joblib(pkl) + 추가로 피클-프리 NPZ 백업도 함께 저장 (model_str + meta + classes + input_dim)
+# train.py
+# - SQLite 라벨 있는 데이터만 로드
+# - depth 데이터 15 스칼라와 3-view image emb를 이어 붙여 L2 정규화 벡터 구성 (399D)
+# - model.type은 centroid 또는 lgbm
+# - LGBM 하이퍼파라미터 그리드 서치
 
 import sys, json, argparse, sqlite3, time, itertools
 from pathlib import Path
@@ -16,7 +12,7 @@ from typing import Optional
 np.set_printoptions(suppress=True, linewidth=100000, threshold=np.inf, precision=4)
 ROOT = Path(__file__).resolve().parent.parent
 
-# ----------------- config 로더 -----------------
+#  config 설정 로드
 def load_config(cli_path):  # type: (Optional[str]) -> (dict, Optional[Path])
     if cli_path:
         p = Path(cli_path)
@@ -51,14 +47,17 @@ def load_config(cli_path):  # type: (Optional[str]) -> (dict, Optional[Path])
     print("[config] 파일 없음. 기본값 사용")
     return {}, None
 
+# 경로 문자열을 받아 절대 경로로 해석
 def resolve_path(p):  # type: (str) -> Path
     p = Path(p)
     return p if p.is_absolute() else (ROOT / p)
 
-# ----------------- DB -----------------
+# DB
+# SQLite 연결 열기
 def open_db(db_path):  # type: (Path) -> sqlite3.Connection
     return sqlite3.connect(str(db_path), isolation_level=None, timeout=10.0)
 
+# 라벨된 샘플 로딩
 def fetch_labeled(conn, min_q=0.0):
     cols = ("d1,d2,d3,mad1,mad2,mad3,r1,r2,r3,sr1,sr2,sr3,logV,logsV,q,emb,product_id")
     cur = conn.cursor()
@@ -68,16 +67,12 @@ def fetch_labeled(conn, min_q=0.0):
         cur.execute("SELECT {} FROM sample_log WHERE has_label=1;".format(cols))
     return cur.fetchall()
 
-# ----------------- 벡터 구성 -----------------
+# SQLite blob에서 float32 벡터를 직접 뷰로 변환
 def emb_from_blob(b):  # type: (bytes) -> np.ndarray
     return np.frombuffer(b, dtype=np.float32)
 
+# DB 행들을 받아 15 스칼라와 임베딩을 이어 붙인 특징 행렬 X와 라벨 y를 생성
 def stack_vectors(rows, expect_emb_dim=None):
-    """
-    DB 컬럼 순서:
-      d1,d2,d3, mad1..mad3, r1..r3, sr1..sr3, logV, logsV, q, emb, product_id
-      => 앞의 12개(core12) + [logV, logsV, q] = 15 스칼라 + emb
-    """
     vecs, labels = [], []
     for r in rows:
         *core12, logV, logsV, q, emb_blob, pid = r
@@ -87,8 +82,6 @@ def stack_vectors(rows, expect_emb_dim=None):
 
         emb = emb_from_blob(emb_blob)
         if expect_emb_dim is not None and emb.shape[0] != expect_emb_dim:
-            # 자동 필터링으로 이미 걸렀지만, 방어 차원에서 한 번 더 체크
-            # print("[warn] emb_dim mismatch: got {} expect {} → skip".format(emb.shape[0], expect_emb_dim))
             continue
 
         v = np.concatenate([np.array(feat15, np.float32), emb.astype(np.float32)], axis=0)
@@ -99,7 +92,7 @@ def stack_vectors(rows, expect_emb_dim=None):
         return None, None
     return np.stack(vecs, 0).astype(np.float32), np.array(labels, dtype=object)
 
-# ----------------- centroid -----------------
+# 클래스별 평균 벡터로 센트로이드를 계산  최소 샘플 수 미만 클래스는 제외
 def train_centroids(X, y, min_count=2):
     classes = {}
     for xi, yi in zip(X, y):
@@ -116,6 +109,7 @@ def train_centroids(X, y, min_count=2):
     counts = np.array(cnts, dtype=np.int32)
     return C, labels, counts
 
+# leave one out 방식으로 top1 정확도를 평가
 def eval_top1_loo(X, y, C, labels, counts):
     uniq = list(labels)
     idx_map = {lab:i for i,lab in enumerate(uniq)}
@@ -139,13 +133,8 @@ def eval_top1_loo(X, y, C, labels, counts):
     acc = (correct/total) if total>0 else None
     return acc, total
 
+# 센트로이드 모델을 피클 없이 NPZ로 저장
 def save_centroids(path, C, labels, counts, dim, cfg_used):
-    """
-    피클 없이 저장:
-      - labels를 문자열 dtype('U128')로 변환
-      - meta는 JSON 문자열로 저장
-      => np.load(..., allow_pickle=False)로 안전 로딩 가능
-    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     meta = {
@@ -165,7 +154,7 @@ def save_centroids(path, C, labels, counts, dim, cfg_used):
     )
     print("[save] {}  classes={} dim={}  (pickle-free)".format(path, len(labels_str), dim))
 
-# ----------------- LightGBM (sklearn 미사용) -----------------
+# 진행률 퍼센트 콜백 생성
 def make_progress_cb(total_iters, period=10, prefix="[cv]"):
     def _cb(env):
         it = getattr(env, "iteration", None)
@@ -177,10 +166,12 @@ def make_progress_cb(total_iters, period=10, prefix="[cv]"):
             print("{} iter {}/{} ({:.1f}%)".format(prefix, it, total_iters, pct))
     return _cb
 
+# 라벨을 정렬된 고유값 순으로 정수 인코딩
 def encode_labels(y):
     classes, y_inv = np.unique(y, return_inverse=True)
     return classes, y_inv.astype(np.int32)
 
+# 간단한 층화 KFold 인덱스 생성
 def stratified_kfold_indices(y_idx, n_splits=5, seed=42):
     rng = np.random.RandomState(int(seed))
     labels = np.unique(y_idx)
@@ -193,6 +184,7 @@ def stratified_kfold_indices(y_idx, n_splits=5, seed=42):
             folds[i % n_splits].append(int(idx))
     return [np.array(sorted(f), dtype=np.int64) for f in folds]
 
+# 설정 dict에서 LightGBM 하이퍼파라미터 구성
 def lgb_params_from_cfg(params, num_class):
     p = {
         "objective": "multiclass",
@@ -211,6 +203,7 @@ def lgb_params_from_cfg(params, num_class):
         p["max_depth"] = int(params["max_depth"])
     return p
 
+# lightgbm.train을 사용하고 조기 종료와 로그 콜백을 함께 설정
 def eval_lgbm_cv(X, y, params, k=5, progress_period=10, progress_prefix="[cv]"):
     import lightgbm as lgb
 
@@ -255,7 +248,7 @@ def eval_lgbm_cv(X, y, params, k=5, progress_period=10, progress_prefix="[cv]"):
         best_it = getattr(booster, "best_iteration", None) or n_est_big
         best_iters.append(int(best_it))
 
-        pred = booster.predict(X[va_idx], num_iteration=best_it)  # (N, C)
+        pred = booster.predict(X[va_idx], num_iteration=best_it)  # N C
         yhat = np.argmax(pred, axis=1)
         acc = float((yhat == y_idx[va_idx]).mean())
         accs.append(acc)
@@ -263,6 +256,7 @@ def eval_lgbm_cv(X, y, params, k=5, progress_period=10, progress_prefix="[cv]"):
 
     return float(np.mean(accs)), k_use, best_iters
 
+# 전체 데이터로 최종 학습 수행
 def train_lgbm_full(X, y, params, n_estimators_override=None, verbose_period=50):
     import lightgbm as lgb
     classes, y_idx = encode_labels(y)
@@ -285,30 +279,31 @@ def train_lgbm_full(X, y, params, n_estimators_override=None, verbose_period=50)
         params=lgb_params,
         train_set=dtrain,
         num_boost_round=n_est,
-        valid_sets=[dtrain],           # 진행률 로그용
+        valid_sets=[dtrain],
         valid_names=["train"],
         callbacks=callbacks
     )
     return booster, classes
 
+# LGBM 모델 저장
 def save_lgbm(path, booster, classes_, input_dim):
     from joblib import dump
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 1) joblib 포맷(모델 문자열 저장 → 버전 독립성 ↑)
+    # joblib 포맷
     booster_str = booster.model_to_string()
     best_it = getattr(booster, "best_iteration", None)
     dump({"booster_str": booster_str, "best_iteration": best_it, "classes_": classes_}, str(path))
     print("[save] {}  classes={} (joblib)".format(path, len(classes_)))
 
-    # 2) 피클-프리 NPZ 백업 (모델 문자열 + 메타 + classes + input_dim)
+    # 피클 프리 NPZ 백업
     npz_path = path.with_suffix(".npz")
     meta = {
         "created_unix": time.time(),
         "best_iteration": int(best_it) if best_it is not None else None,
         "input_dim": int(input_dim),
-        "note": "LightGBM model backup stored as text (model_str) and classes (U128)."
+        "note": "LightGBM model backup stored as text model_str and classes U128"
     }
     classes_u = np.array([str(x) for x in classes_], dtype="U128")
     np.savez(
@@ -319,13 +314,8 @@ def save_lgbm(path, booster, classes_, input_dim):
     )
     print("[save] {}  (pickle-free backup)".format(npz_path))
 
-# ----------------- Grid Search (no sklearn) -----------------
+# 딕셔너리의 값 리스트에 대한 모든 조합을 만들어 파라미터 세트 리스트 생성
 def cartesian_product(dict_of_lists):
-    """
-    dict -> list[dict] (모든 조합)
-    예) {"lr":[0.05,0.1], "num_leaves":[31,63]} →
-        [{"lr":0.05,"num_leaves":31}, {"lr":0.05,"num_leaves":63}, {"lr":0.1,"num_leaves":31}, {"lr":0.1,"num_leaves":63}]
-    """
     if not dict_of_lists:
         return [{}]
     keys = list(dict_of_lists.keys())
@@ -338,17 +328,15 @@ def cartesian_product(dict_of_lists):
         combos.append(d)
     return combos
 
+# 기본 파라미터에 override를 덮어써 새 딕셔너리 생성
 def merge_params(base_params, override_dict):
     p = dict(base_params) if base_params else {}
     for k, v in override_dict.items():
         p[k] = v
     return p
 
+# LGBM 그리드 서치 실행
 def grid_search_lgbm(X, y, base_params, grid_space, k=5, progress_period=10):
-    """
-    반환: best_params(dict), best_acc(float), best_iters(list), trials(list of dict)
-      trials 항목: {"params": {...}, "acc": 0.876, "folds": k, "best_iters":[...]}
-    """
     combos = cartesian_product(grid_space)
     print("[grid] total combinations =", len(combos))
 
@@ -369,10 +357,8 @@ def grid_search_lgbm(X, y, base_params, grid_space, k=5, progress_period=10):
         print("[grid] result #{}/{} acc={}".format(gi+1, len(combos), "None" if acc is None else "{:.4f}".format(acc)))
     return best_params, best_acc, best_iters, trials
 
+# 그리드 서치 결과를 JSON 리포트로 저장
 def save_grid_report(path_like, trials, chosen):
-    """
-    trials를 JSON으로 저장 (가벼운 리포트)
-    """
     path = Path(path_like)
     report_path = path.with_suffix(".grid.json")
     try:
@@ -391,31 +377,37 @@ def save_grid_report(path_like, trials, chosen):
     except Exception as e:
         print("[grid] report save failed:", e)
 
-# ----------------- 유틸: DB 내 임베딩 차원 자동 감지 -----------------
+# 각 행의 emb blob 길이를 세어 차원별 개수를 반환 형식으로 집계
 def detect_embed_dim_counts(rows):
     counts = {}
     for r in rows:
-        emb_blob = r[-2]  # (*core12, logV, logsV, q, emb, product_id)
+        emb_blob = r[-2]  # core12  logV  logsV  q  emb  product_id
         d = np.frombuffer(emb_blob, dtype=np.float32).shape[0]
         counts[d] = counts.get(d, 0) + 1
     return counts
 
-# ----------------- CLI -----------------
+# 메인 엔트리 포인트
+# 인자와 설정 로딩
+# DB에서 라벨 데이터 로드
+# 선택된 차원으로 특징 벡터 스택과 라벨 생성
+# 모델 타입에 따라
+#   lgbm이면 그리드 서치 또는 기본 CV로 적정 반복수를 정하고 전체 학습 후 저장
+#   centroid이면 센트로이드 계산과 LOO 평가 후 NPZ 저장
+# 코드 종료
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", type=str, default=None, help="YAML/JSON 경로(옵션)")
-    ap.add_argument("--min_count", type=int, default=None, help="(centroid) 클래스 최소 샘플수(미지정시 2)")
-    ap.add_argument("--min_q", type=float, default=None, help="q 하한(미지정시 0.0)")
-    ap.add_argument("--type", type=str, default=None, help="모델 타입 강제: centroid|lgbm")
-    ap.add_argument("--grid", type=int, default=None, help="lgbm 그리드 서치 사용 여부(1=on, 0=off). 미지정시 config.lgbm_grid 존재 시 자동")
-    ap.add_argument("--cv_k", type=int, default=None, help="그리드/평가용 K-fold (기본 5)")
+    ap.add_argument("--config", type=str, default=None, help="YAML/JSON 경로 옵션")
+    ap.add_argument("--min_count", type=int, default=None, help="centroid 클래스 최소 샘플수 미지정시 2")
+    ap.add_argument("--min_q", type=float, default=None, help="q 하한 미지정시 0.0")
+    ap.add_argument("--type", type=str, default=None, help="모델 타입 강제 centroid 또는 lgbm")
+    ap.add_argument("--grid", type=int, default=None, help="lgbm 그리드 서치 사용 여부 1 on 0 off  미지정시 config lgbm_grid 존재 시 자동")
+    ap.add_argument("--cv_k", type=int, default=None, help="그리드 평가용 K fold 기본 5")
     args = ap.parse_args()
 
     cfg, used_cfg = load_config(args.config)
 
     model_cfg = cfg.get("model", {})
     model_type = (args.type or model_cfg.get("type", "centroid")).lower()
-    # config의 out_dim과 concat3를 참고하되, 실제 DB 차원 자동 감지를 우선 사용
     emb_cfg = cfg.get("embedding", {})
     out_dim_cfg = int(emb_cfg.get("out_dim", 128))
     concat3_cfg = bool(emb_cfg.get("concat3", False))
@@ -444,17 +436,14 @@ def main():
     if not rows:
         print("[fatal] usable data not found"); return 2
 
-    # DB 실제 임베딩 차원 자동 감지
     dim_counts = detect_embed_dim_counts(rows)
     if not dim_counts:
         print("[fatal] no embeddings in rows"); return 2
-    # 최빈 차원 선택
     target_emb_dim = max(dim_counts, key=dim_counts.get)
     print("[data] emb-dim counts in DB =", dim_counts, "| use_dim =", target_emb_dim)
     if target_emb_dim != expect_dim_cfg:
         print("[warn] config expect_dim={} != DB use_dim={} (자동으로 DB 기준 사용)".format(expect_dim_cfg, target_emb_dim))
 
-    # 해당 차원만 필터링하여 벡터 스택
     rows = [r for r in rows if np.frombuffer(r[-2], dtype=np.float32).shape[0] == target_emb_dim]
     X, y = stack_vectors(rows, expect_emb_dim=target_emb_dim)
     if X is None:
@@ -484,7 +473,6 @@ def main():
             save_lgbm(lgbm_path, booster, classes_, input_dim=X.shape[1])
             return 0
 
-        # grid 미사용: 기본 CV → full train
         acc, folds, best_iters = eval_lgbm_cv(X, y, params_base, k=cv_k, progress_period=10)
         if acc is None:
             print("[eval] not enough per-class samples for CV")
@@ -500,7 +488,6 @@ def main():
         save_lgbm(lgbm_path, booster, classes_, input_dim=X.shape[1])
         return 0
 
-    # 기본: centroid
     C, labels, counts = train_centroids(X, y, min_count=min_count)
     if C is None:
         print("[fatal] no class has enough samples(min_count)"); return 3
