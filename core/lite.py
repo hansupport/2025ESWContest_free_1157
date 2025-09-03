@@ -1,4 +1,3 @@
-# core/lite.py
 import os
 import threading, time
 from pathlib import Path
@@ -8,20 +7,19 @@ import cv2
 
 from .utils import t_now, ms, l2_normalize, same_device
 
-# ======== DataMatrix 래퍼 ========
+# DM 카메라를 퍼시스턴트로 유지하고, ROI 기반의 빠른 스캔 API 제공
 class DM:
     _persist = None
     _lock = threading.Lock()
 
+    # DM 내부 공용 락(공유 카메라 동시 접근 방지)
     @staticmethod
     def lock():
         return DM._lock
 
+    # Datamatrix.open_camera()로 카메라 1회만 열어 보관 + 짧은 웜업
     @staticmethod
     def open_persistent(camera, prefer_res, prefer_fps):
-        """
-        datamatrix.open_camera() 래핑.
-        """
         if DM._persist is not None:
             return DM._persist
         try:
@@ -44,8 +42,8 @@ class DM:
             print("[dm.persist] open failed:", e)
         return DM._persist
 
+    # 퍼시스턴트 캡처 객체 해제
     @staticmethod
-    
     def close_persistent():
         if DM._persist is None:
             return
@@ -56,18 +54,15 @@ class DM:
         DM._persist = None
         print("[dm.persist] closed")
 
+    # ROI들을 돌리며 0,90,180,270 회전 빠른 디코드/ 타임 내 1건 반환환
     @staticmethod
     def scan_fast4(handle, rois, timeout_s: float, debug: bool=False, trace_id: Optional[int]=None):
-        """
-        datamatrix.decode_payloads_fast4() 기반의 빠른 스캔. (0/90/180/270)
-        """
         try:
             from datamatrix import (
                 read_frame_nonblocking as dm_read,
                 crop_roi_center as dm_crop_roi,
                 decode_payloads_fast4 as dm_decode_fast4,
             )
-            # 기본 ROI: datamatrix.DEFAULT_ROIS
             try:
                 from datamatrix import DEFAULT_ROIS as DM_DEFAULT_ROIS
             except Exception:
@@ -133,8 +128,10 @@ class DM:
             print("[dm.scan] error:", e)
             return None
 
-# ======== Embedding (ONNX CPU) ========
+# ONNXRuntime로 임베딩 벡터 생성
+# RGB입력 -> 전처리 -> 임베딩 -> L2 정규화
 class ONNXEmbedder:
+    # ONNX 세션 로드, 전처리 파라미터 세팅
     def __init__(self, onnx_path: str, input_size: int, out_dim: int,
                  roi_px: Optional[Tuple[int,int]], roi_off: Tuple[int,int]):
         try:
@@ -148,10 +145,8 @@ class ONNXEmbedder:
         self.roi_off = (int(roi_off[0]), int(roi_off[1])) if roi_off is not None else (0,0)
 
         sess_opt = ort.SessionOptions()
-        # Jetson Nano: 과도한 스레드는 오히려 느려질 수 있음 → 기본 1/1
         sess_opt.intra_op_num_threads = int(os.getenv("ORT_INTRA_THREADS", "1"))
         sess_opt.inter_op_num_threads = int(os.getenv("ORT_INTER_THREADS", "1"))
-        # 그래프 최적화 활성화
         try:
             sess_opt.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         except Exception:
@@ -164,6 +159,7 @@ class ONNXEmbedder:
         self.mean = np.array([0.485,0.456,0.406], np.float32)
         self.std  = np.array([0.229,0.224,0.225], np.float32)
 
+    # 중심+오프셋 기반 ROI 크롭, 없으면 전체체
     def _compute_center_roi(self, img):
         if self.roi_px is None:
             return img
@@ -176,6 +172,7 @@ class ONNXEmbedder:
         y = max(0, min(H - rh, cy - rh//2))
         return img[y:y+rh, x:x+rw]
 
+    # BGR->RGB, 리사이즈, 정규화, CHW 변환
     def _preprocess(self, bgr):
         img = self._compute_center_roi(bgr)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -186,16 +183,18 @@ class ONNXEmbedder:
         img = np.transpose(img, (2,0,1))  # CHW
         return np.expand_dims(img, 0).astype(np.float32)  # [1,3,H,W]
 
+    # 한 장 임베딩 추출 후 L2 정규화 벡터 반환
     def embed_bgr(self, bgr: np.ndarray) -> np.ndarray:
         X = self._preprocess(bgr)
         y = self.sess.run([self.output_name], {self.input_name: X})[0]
         v = y[0].astype(np.float32)
         return l2_normalize(v)
 
+# Emb 유틸: 임베더 생성/카메라 오픈/워밍업/임베딩(one frame), 3-뷰(concat) 지원
 class Emb:
+    # 설정(S)으로 ONNX 임베더 생성(가중치 파일 검사), S.embedding.weights_path는 ONNX여야 함.
     @staticmethod
     def build_embedder(S):
-        # S.embedding.weights_path는 ONNX여야 함
         p = Path(S.embedding.weights_path)
         if not p.exists():
             raise RuntimeError(f"[img2emb] ONNX 가중치가 없습니다: {p}")
@@ -204,9 +203,9 @@ class Emb:
             S.embedding.roi_px, S.embedding.roi_offset
         )
 
+    # 간단 V4L2 오픈(해상도/FPS/포맷 세팅). 1프레임 읽기 실패 시 예외.
     @staticmethod
     def _open_camera(cam, w=None, h=None, fps=None, pixfmt="YUYV"):
-        # 간단 V4L2 오픈 (필요시 GStreamer로 확장)
         cam_id = cam
         if isinstance(cam, str):
             if cam.isdigit():
@@ -217,9 +216,9 @@ class Emb:
                 except Exception:
                     pass
         cap = cv2.VideoCapture(cam_id, cv2.CAP_V4L2)
-        if w: cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(w))
-        if h: cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(h))
-        if fps: cap.set(cv2.CAP_PROP_FPS, int(fps))
+        if w:   cap.set(cv2.CAP_PROP_FRAME_WIDTH,  int(w))
+        if h:   cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(h))
+        if fps: cap.set(cv2.CAP_PROP_FPS,          int(fps))
         if pixfmt:
             fourcc = cv2.VideoWriter_fourcc(*pixfmt.upper())
             cap.set(cv2.CAP_PROP_FOURCC, fourcc)
@@ -229,6 +228,9 @@ class Emb:
             raise RuntimeError(f"카메라 열기 실패: {cam}")
         return cap
 
+    # end to end 워밍업.
+    # 공유장치 : DM 퍼시스턴트 핸들에서 프레임 읽어 바로 embed 수행
+    # 별도 장치: 개별 VideoCapture 열어 pregrab 후 frames만큼 embed
     @staticmethod
     def warmup_shared(emb, S, dm_handle, lock, frames=12, pregrab=2):
         if same_device(S.dm.camera, S.embedding.cam_dev) and (dm_handle is not None):
@@ -250,6 +252,7 @@ class Emb:
             except Exception as e:
                 print("[warmup] shared path failed:", e)
 
+        # 별도 장치 경로
         print("[warmup] img2emb: separate device warmup path")
         cap = Emb._open_camera(S.embedding.cam_dev, w=S.embedding.width, h=S.embedding.height,
                                fps=S.embedding.fps, pixfmt=S.embedding.pixfmt or "YUYV")
@@ -265,6 +268,7 @@ class Emb:
         finally:
             cap.release()
 
+    # 최신 프레임 1장 임베딩. 공유 장치이면 DM 핸들로 안전하게 읽고, 아니면 별도 카메라 오픈.
     @staticmethod
     def embed_one_frame_shared(emb, S, dm_handle, lock, pregrab=3):
         if same_device(S.dm.camera, S.embedding.cam_dev) and (dm_handle is not None):
@@ -272,7 +276,7 @@ class Emb:
                 from datamatrix import read_frame_nonblocking as dm_read
                 with lock:
                     for _ in range(max(0, pregrab)):
-                        _ = dm_read(dm_handle[1].cap)
+                        _ = dm_read(dm_handle[1].cap)  # flush
                     bgr = dm_read(dm_handle[1].cap)
                 if bgr is None:
                     return None
@@ -280,7 +284,7 @@ class Emb:
             except Exception as e:
                 print("[embed] shared path error:", e)
                 return None
-        # separate camera
+        # 별도 카메라
         try:
             cap = Emb._open_camera(S.embedding.cam_dev, w=S.embedding.width, h=S.embedding.height,
                                    fps=S.embedding.fps, pixfmt=S.embedding.pixfmt or "YUYV")
@@ -295,17 +299,13 @@ class Emb:
             print("[embed] separate device error:", e)
             return None
 
-    # ==============================
     # 3-View Concat 임베딩 (center + mirror L/R)
-    # ==============================
+    # 이미지 중심 기준 오프셋 ROI 크롭.
+    # hflip=TRUE면 좌우 반전
+    # shrink>0이면 ROI 가장자리 일부를 잘라 노이즈 완화화
     @staticmethod
     def _crop_center_roi(img: np.ndarray, rw: int, rh: int, dx: int, dy: int,
                          hflip: bool=False, shrink: float=0.0) -> np.ndarray:
-        """
-        이미지 중심 기준 (rw,rh), (dx,dy) 오프셋 ROI 크롭.
-        hflip=True면 좌우반전 보정.
-        shrink>0이면 ROI 내부를 shrink 비율만큼 가장자리 잘라 중심 재크롭.
-        """
         H, W = img.shape[:2]
         rw = max(1, min(int(rw), W))
         rh = max(1, min(int(rh), H))
@@ -326,18 +326,15 @@ class Emb:
                 roi = roi[sh:h-sh, sw:w-sw] if (h - 2*sh > 1 and w - 2*sw > 1) else roi
         return roi
 
+    # 단일 프레임에서 전달된 ROI3 만 임베딩 후 contact
     @staticmethod
     def _embed_views_from_frame(emb, frame_bgr: np.ndarray,
                                 rois3: List[Tuple[int,int,int,int,int]],
                                 center_shrink: float, mirror_shrink: float) -> Optional[np.ndarray]:
-        """
-        단일 프레임에서 전달된 ROI 목록만 임베딩 후 concat.
-        rois3: [(w,h,dx,dy,hflip), ...]  ← 길이 1도 허용
-        """
         if frame_bgr is None or frame_bgr.size == 0:
             return None
         if not rois3:
-            return None  # <<<< 기본 3개 강제 제거(버그 원인). 호출자가 원하는 ROI만 처리.
+            return None
 
         out_vecs = []
         for i, (w,h,dx,dy,hf) in enumerate(rois3):
@@ -355,18 +352,14 @@ class Emb:
         vcat = np.concatenate(out_vecs, axis=0).astype(np.float32)
         return l2_normalize(vcat)
 
+    # 최신 프레임 1장을 읽어 [중앙,좌,우] 3개 ROI를 모두 자르고, 각 ROI를 ONNX에 넣어 concat
     @staticmethod
     def embed_one_frame_shared_concat3(emb, S, dm_handle, lock,
                                        pregrab: int=12,
-                                       mirror_period: int=3,          # 사용 안함(한 프레임에서 3ROI)
+                                       mirror_period: int=3,
                                        mirror_shrink: float=0.08,
                                        center_shrink: float=0.0,
                                        rois3: Optional[List[Tuple[int,int,int,int,int]]]=None) -> Optional[np.ndarray]:
-        """
-        최신 프레임 1장을 읽어 [center, left-mirror, right-mirror] 3개 ROI를 모두 잘라
-        각 ROI를 ONNX에 넣고 concat(3*128=384) → L2 normalize 해서 반환.
-        """
-        # 기본 rois3
         if (not rois3) or len(rois3) < 3:
             rois3 = [
                 (540, 540, +103, -260, 0),  # center
@@ -374,6 +367,7 @@ class Emb:
                 (270, 440, +630, -170, 1),  # right mirror
             ]
 
+        # DM에서 None 아닌 프레임 1장을 얻기 위한 재시도
         def _read_nonnull_frame_dm(dm_read, cap, tries=8, sleep_s=0.003):
             for _ in range(max(1, int(tries))):
                 frm = dm_read(cap)
@@ -382,7 +376,6 @@ class Emb:
                 time.sleep(float(sleep_s))
             return None
 
-        # DM 퍼시스턴트(공유) 경로
         if same_device(S.dm.camera, S.embedding.cam_dev) and (dm_handle is not None):
             try:
                 from datamatrix import read_frame_nonblocking as dm_read
@@ -394,7 +387,6 @@ class Emb:
                     # flush
                     for _ in range(max(0, int(pregrab))):
                         _ = dm_read(dm_handle[1].cap)
-                    # 최신 프레임 1장 확보
                     bgr = _read_nonnull_frame_dm(dm_read, dm_handle[1].cap, tries=8, sleep_s=0.003)
                 if bgr is None:
                     return None
@@ -405,14 +397,12 @@ class Emb:
                     mirror_shrink=float(mirror_shrink)
                 )
                 if vcat is not None:
-                    # 진단 로그(최초 몇 번만 찍힘)
                     print(f"[embed.concat3] one-frame 3ROI → emb_len={vcat.shape[0]}")
                 return vcat
             except Exception as e:
                 print("[embed.concat3] shared path error:", e)
                 return None
 
-        # 별도 카메라 경로
         try:
             cap = Emb._open_camera(S.embedding.cam_dev, w=S.embedding.width, h=S.embedding.height,
                                    fps=S.embedding.fps, pixfmt=S.embedding.pixfmt or "YUYV")
@@ -444,7 +434,8 @@ class Emb:
             except Exception:
                 pass
 
-# ======== 모델/스토리지 ========
+
+#  SQLite 오픈(WAL/PRAGMA 적용) 후 스키마 최초 생성
 class Storage:
     @staticmethod
     def open_db(db_path: str):
@@ -453,6 +444,8 @@ class Storage:
         t0 = time.perf_counter()
         conn = sqlite3.connect(str(dbp), isolation_level=None, timeout=5.0)
         t1 = time.perf_counter()
+        
+        # 성능/안정성 기본 PRAGMA
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA temp_store=MEMORY")
@@ -482,10 +475,12 @@ class Storage:
         print(f"[db] connect {(t1 - t0)*1000:.1f} ms  | total open {(time.perf_counter()-t0)*1000:.1f} ms")
         return conn
 
+    # float32 벡터 -> BLOB 변환
     @staticmethod
     def emb_to_blob(vec: np.ndarray) -> bytes:
         return np.asarray(vec, dtype=np.float32).tobytes(order="C")
 
+    # 샘플 1건 기록
     @staticmethod
     def on_sample_record(conn, feat15: dict, emb128: np.ndarray, product_id, has_label: int, origin: str):
         vals = (
@@ -504,11 +499,11 @@ class Storage:
           emb, origin
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """, vals)
-        # 요약 출력
+        
         meta = [
             feat15["d1"], feat15["d2"], feat15["d3"],
             feat15["mad1"], feat15["mad2"], feat15["mad3"],
-            feat15["r1"], feat15["r2"], feat15["r3"],
+            feat15["r1"],  feat15["r2"],  feat15["r3"],
             feat15["sr1"], feat15["sr2"], feat15["sr3"],
             feat15["logV"], feat15["logsV"], feat15["q"]
         ]
@@ -516,17 +511,24 @@ class Storage:
         print(f"[record] origin={origin} has_label={has_label} product_id={product_id}")
         print(f"[vector] dim={full_vec.shape[0]}")
 
+# 모델
 class Models:
     class ProbSmoother:
+        # 최근 k개 예측을 모아 다수결 + 평균 확률로 의사결정
+        
         def __init__(self, window=3, min_votes=2):
             from collections import deque
             self.window = int(window)
             self.min_votes = int(min_votes)
             self.buf = []  # [(label, prob)]
+
+        #버퍼에 (label, prob) 추가. 길이 초과 시 앞에서 제거
         def push(self, label, prob):
             self.buf.append((str(label), float(prob)))
             if len(self.buf) > self.window:
                 self.buf.pop(0)
+
+        # 현재 1위 라벨/득표수/평균확률 반환
         def status(self):
             from collections import Counter
             cnt = Counter([lab for lab, _ in self.buf])
@@ -534,6 +536,8 @@ class Models:
             top_lab, votes = cnt.most_common(1)[0]
             avg_p = float(np.mean([p for lab, p in self.buf if lab == top_lab]))
             return top_lab, votes, avg_p
+
+        # 조건 충족 시 최종 결정 반환 후 버퍼 clear
         def maybe_decide(self, threshold=0.40):
             if len(self.buf) < self.window: return None
             lab, votes, avg_p = self.status()
@@ -542,6 +546,7 @@ class Models:
                 return (lab, avg_p)
             return None
 
+    # 추론 엔진: centroi/LGBM 모델 로드, 감지, 리로드, 추론
     class InferenceEngine:
         def __init__(self, S):
             self.S = S
@@ -553,6 +558,7 @@ class Models:
             self.lgbm_model, self.lgbm_classes, self.lgbm_best_it = (None, None, None)
             self._load_initial()
 
+        # 시작 시 존재하는 모델만 로드
         def _load_initial(self):
             if self.cent_path.exists():
                 self.last_mtime_cent = self.cent_path.stat().st_mtime
@@ -565,6 +571,7 @@ class Models:
                 if self.lgbm_model is not None:
                     print(f"[model] lgbm 로드: classes={len(self.lgbm_classes)} best_it={self.lgbm_best_it}")
 
+        # 파일 mtime 변화를 감지해 해당 모델만 리로드
         def reload_if_updated(self):
             if self.cent_path.exists():
                 m = self.cent_path.stat().st_mtime
@@ -581,6 +588,7 @@ class Models:
                     if self.lgbm_model is not None:
                         print(f"[update] lgbm 업데이트: classes={len(self.lgbm_classes)} best_it={self.lgbm_best_it}")
 
+        # 센트로이드 로드 후 행단위 L2 정규화
         def _load_centroid(self):
             if not self.cent_path.exists(): return None, None
             z = np.load(str(self.cent_path), allow_pickle=True)
@@ -589,6 +597,7 @@ class Models:
             Cn = C / (np.linalg.norm(C, axis=1, keepdims=True)+1e-8)
             return Cn, labels
 
+        # 다양한 LGBM 포맷 지원 시도
         def _try_load_lgbm_npz(self, path: Path):
             try:
                 z = np.load(str(path), allow_pickle=True)
@@ -625,6 +634,7 @@ class Models:
             except Exception:
                 return None
 
+        # LGBM 로더: npz/json/joblib/text 순으로 시도
         def _load_lgbm(self):
             p = self.lgbm_path
             if not p.exists(): return None, None, None
@@ -656,7 +666,7 @@ class Models:
             # text 폴백
             try:
                 txt = p.read_text(encoding="utf-8")
-                if txt.strip().startswith("tree"):
+                if txt.strip().startsWith("tree"):
                     import lightgbm as lgb
                     booster = lgb.Booster(model_str=txt)
                     return booster, None, None
@@ -665,6 +675,7 @@ class Models:
             print("[model] lgbm load failed (unsupported format)")
             return None, None, None
 
+        # 모델이 기대하는 featires 차원을 추론
         def _lgbm_expected_dim(self, model):
             for attr in ("n_features_", "n_features_in_"):
                 if hasattr(model, attr):
@@ -681,6 +692,7 @@ class Models:
                 except Exception: pass
             return None
 
+        # 특징 차원이 다르면 슬라이스 또는 제로패딩으로 맞춤
         def _ensure_feat_dim(self, model, x: np.ndarray) -> np.ndarray:
             exp = self._lgbm_expected_dim(model)
             if exp is None: return x
@@ -692,6 +704,7 @@ class Models:
             pad = np.zeros((x.shape[0], exp - cur), dtype=x.dtype)
             return np.hstack([x, pad])
 
+        # LGBM 확률 예측
         def _lgbm_predict_proba(self, model, classes, vec143: np.ndarray, best_iteration=None) -> np.ndarray:
             x = vec143.reshape(1, -1).astype(np.float32)
             x = self._ensure_feat_dim(model, x)
@@ -702,12 +715,14 @@ class Models:
                 probs = model.predict(x, num_iteration=num_it)[0]
             return np.asarray(probs, dtype=np.float32)
 
+        # 센트로이드: 코사인 유사도 상위 topk (label, sim) 리스트
         def _centroid_predict(self, xx: np.ndarray, topk: int):
             assert self.Cn is not None and self.labels is not None
             sims = self.Cn @ xx
             idx = np.argsort(-sims)[:topk]
             return [(str(self.labels[i]), float(sims[i])) for i in idx]
 
+        # top1/top2 margin 기반 confidence 계산
         def _centroid_conf_from_topk(self, preds, scale: float):
             if not preds:
                 return "", 0.0, 0.0, 0.0
@@ -715,14 +730,11 @@ class Models:
             lab1, s1 = arr[0]
             s2 = arr[1][1] if len(arr) > 1 else -1.0
             margin = float(s1 - s2)
-            # two-class view: conf = sigmoid(scale * margin)
             conf = float(1.0 / (1.0 + np.exp(-scale * margin))) if len(arr) > 1 else 1.0
             return str(lab1), conf, margin, s2
 
+        # 최종 추론
         def infer(self, full_vec_143: np.ndarray):
-            """
-            반환: (top_lab, top_p, gap, backend_str)  or backend=None
-            """
             S = self.S
             ran = False
             top_lab, top_p, gap, backend = None, 0.0, 0.0, None
@@ -772,7 +784,8 @@ class Models:
                 return None, 0.0, 0.0, None
             return top_lab, top_p, gap, backend
 
-# 내부 helper
+
+# 경량 네임스페이스(딕셔너리 → 점 접근용)
 class SimpleNamespace:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
