@@ -12,19 +12,16 @@ import cv2 as cv
 TICK = 0.20
 LOG_EVERY_DECODE = 1
 MAX_BACKOFF = 1.0
-# AUTO 미사용. 기본 카메라를 2번으로 고정.
 DEFAULT_CAMERA: Union[int,str] = 2
 
-# ===== RGB 전용 기본 ROI (요청값 반영) =====
-# - 메인: 530x530, dx=+100, dy=-180
-# - 좌 미러: 400x550, dx=-470, dy=-200, 좌우반전
-# - 우 미러: 390x550, dx=+680, dy=-190, 좌우반전
+# RGB 전용 기본 ROI
 DEFAULT_ROIS: List[Dict[str, Any]] = [
     {"name": "RGB_MAIN",   "size": [530, 530], "offset": [ +90, -130], "hflip": False},
     {"name": "RGB_L_MIRR", "size": [390, 500], "offset": [ -450, -140], "hflip": True },
     {"name": "RGB_R_MIRR", "size": [390, 490], "offset": [ +660, -140], "hflip": True },
 ]
 
+# 타임스탬프 프리픽스 추가 후 즉시 flush 처리
 def log(msg: str):
     ts = time.strftime("%H:%M:%S", time.localtime())
     sys.stderr.write(f"[{ts}] {msg}\n")
@@ -36,6 +33,7 @@ try:
 except Exception:
     pass
 
+# pylibdmtx decode 심볼 동적 로딩. import → 폴백, 실패 시 설치 가이드 포함 예외
 def load_dmtx_decode():
     t0 = time.perf_counter()
     try:
@@ -59,17 +57,12 @@ def load_dmtx_decode():
 
 _dm_decode = load_dmtx_decode()
 
+# GStreamer appsink→ 실패 시 V4L2 → 최종 RealSense 컬러 스트림. (type, handle) 튜플 반환.
 def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
-    """
-    Jetson/OpenCV(UVC)에서 '항상 최신 프레임'을 보장하기 위한 오픈 정책:
-      1) 가능하면 GStreamer appsink로 오픈 (drop=true, max-buffers=1, sync=false)
-      2) 실패 시 V4L2 폴백 + CAP_PROP_BUFFERSIZE=1 시도
-      3) 최종 폴백 RealSense (frames_queue_size=1)
-    """
     t_all0 = time.perf_counter()
     cam_id = 0 if camera in (None, "auto") else camera
 
-    # 1) GStreamer appsink 우선
+    # 1) GStreamer appsink
     try:
         if "GStreamer: YES" in cv.getBuildInformation():
             device = cam_id if (isinstance(cam_id, str) and cam_id.startswith("/dev/video")) else f"/dev/video{int(cam_id)}"
@@ -103,17 +96,17 @@ def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
     except Exception as e:
         log(f"[WARN] GStreamer 경로 예외: {e}")
 
-    # 2) V4L2 폴백
+    # 2) V4L2 폴백 열기, 성공 시 ("webcam", cap) 반환.
     cap = cv.VideoCapture(cam_id, cv.CAP_V4L2)
     cap.set(cv.CAP_PROP_FRAME_WIDTH,  int(prefer_res[0]))
     cap.set(cv.CAP_PROP_FRAME_HEIGHT, int(prefer_res[1]))
     cap.set(cv.CAP_PROP_FPS,          int(prefer_fps))
     try:
-        cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))  # RealSense UVC는 MJPG일 때가 많음
+        cap.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc(*'MJPG'))
     except Exception:
         pass
     try:
-        cap.set(cv.CAP_PROP_BUFFERSIZE, 1)  # ★ 큐를 1장으로
+        cap.set(cv.CAP_PROP_BUFFERSIZE, 1)
     except Exception:
         pass
 
@@ -122,7 +115,7 @@ def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
         log(f"V4L2 open {prefer_res[0]}x{prefer_res[1]}@{prefer_fps} in {(time.perf_counter()-t_all0)*1000:.2f} ms")
         return ("webcam", cap)
 
-    # 3) 최종 폴백: RealSense 컬러
+    # 3) RealSense 컬러 파이프라인 폴백, 성공 시 ("realsense", (pipeline, rs)) 반환.
     try:
         import pyrealsense2 as rs
         pipeline = rs.pipeline()
@@ -136,7 +129,7 @@ def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
                 profile = pipeline.start(config)
                 dev = profile.get_device()
                 color_sensor = dev.first_color_sensor()
-                try: color_sensor.set_option(rs.option.frames_queue_size, 1)  # ★ 큐 최소화
+                try: color_sensor.set_option(rs.option.frames_queue_size, 1)
                 except Exception: pass
                 log(f"RealSense start {w}x{h}@{fps} in {(time.perf_counter()-t0)*1000:.2f} ms")
                 log(f"Camera total open time {(time.perf_counter()-t_all0)*1000:.2f} ms")
@@ -152,10 +145,10 @@ def open_camera(camera=DEFAULT_CAMERA, prefer_res=(1920,1080), prefer_fps=6):
 
     log("[ERR] 카메라 열기 실패"); sys.exit(1)
 
+# 최신 프레임 우선 읽기
 def read_frame_nonblocking(cam):
     if cam[0] == "realsense":
         pipeline, rs = cam[1]
-        # ★ 드레인: 묵은 프레임 밀어내기
         for _ in range(3):
             try:
                 _ = pipeline.poll_for_frames()
@@ -172,16 +165,16 @@ def read_frame_nonblocking(cam):
         return np.asanyarray(c.get_data())
     else:
         cap = cam[1]
-        # ★★★ 핵심: 최신 프레임 확보용 드레인 (4~8회 권장)
         try:
             for _ in range(6):
-                cap.grab()   # 읽지 않고 큐에서 버림
+                cap.grab()
         except Exception:
             pass
         ret, frame = cap.read()
         if not ret: return None
         return frame
 
+# 코드 존재 가능성 판단
 def likely_has_code(gray):
     lap_var = cv.Laplacian(gray, cv.CV_64F).var()
     if lap_var < 15.0:
@@ -191,6 +184,7 @@ def likely_has_code(gray):
         return False
     return True
 
+# 중앙 기준 ROI 절대 좌표 크롭, BGR 서브이미지 반환
 def crop_roi_center(bgr, roi_w, roi_h, dx, dy):
     h, w = bgr.shape[:2]
     x0 = (w - roi_w) // 2 + dx
@@ -199,19 +193,22 @@ def crop_roi_center(bgr, roi_w, roi_h, dx, dy):
     y0 = max(0, min(h - roi_h, y0))
     return bgr[y0:y0+roi_h, x0:x0+roi_w]
 
-# ── 보조 전처리 ──
+# CLAHE 대비 보정
 def _clahe(gray):
     clahe = cv.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     return clahe.apply(gray)
 
+# 샤프닝 커널 적용
 def _sharpen(gray):
     k = np.array([[0,-1,0],[-1,5,-1],[0,-1,0]], np.float32)
     return cv.filter2D(gray, -1, k)
 
+# 적응형 이진화
 def _binarize(gray):
     return cv.adaptiveThreshold(gray, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C,
                                 cv.THRESH_BINARY, 21, 5)
 
+# 0/90/180/270 회전 리스트 생성, 회전된 이미지 리스트 반환
 def _rot90s(img):
     return [
         img,
@@ -220,7 +217,7 @@ def _rot90s(img):
         cv.rotate(img, cv.ROTATE_90_COUNTERCLOCKWISE),
     ]
 
-# ── 간단 디워프(사변형 → 정사각) ──
+# 사변형 검출해 정사각 투시 보정. (성공: 정사각 gray 반환. 실패: None 반환)
 def _try_dewarp(gray):
     g = cv.GaussianBlur(gray, (3,3), 0)
     edges = cv.Canny(g, 60, 180)
@@ -247,13 +244,12 @@ def _try_dewarp(gray):
     warped = cv.warpPerspective(gray, M, (side, side))
     return warped
 
-# ── 제한시간(프레임/ROI 별) 내에서 빠른→정교 순으로 시도 ──
+# robust 디코드
 def decode_payloads_robust(gray, max_count=4, time_budget_ms=120):
     t_start = time.perf_counter()
     def left_ms():
         return max(0.0, time_budget_ms - (time.perf_counter()-t_start)*1000.0)
 
-    # Fast path: 원본/180°, 짧은 timeout
     for img in _rot90s(gray)[:2]:  # [0°, 180°]
         try:
             res = _dm_decode(img, max_count=max_count, timeout=int(min(60, left_ms())))
@@ -271,7 +267,7 @@ def decode_payloads_robust(gray, max_count=4, time_budget_ms=120):
     if left_ms() <= 0: return []
     up = cv.resize(gray, None, fx=1.6, fy=1.6, interpolation=cv.INTER_CUBIC)
     sharp = _sharpen(up)
-    for img in _rot90s(sharp):  # 4방향
+    for img in _rot90s(sharp):
         if left_ms() <= 0: return []
         try:
             res = _dm_decode(img, max_count=max_count, timeout=int(min(90, left_ms())))
@@ -315,7 +311,6 @@ def decode_payloads_robust(gray, max_count=4, time_budget_ms=120):
                 except Exception: out.append(str(r.data))
             if out: return out
 
-    # 디워프 1회 (기울어진 30~50° 대응)
     if left_ms() <= 0: return []
     warped = _try_dewarp(gray)
     if warped is not None and left_ms() > 0:
@@ -332,6 +327,7 @@ def decode_payloads_robust(gray, max_count=4, time_budget_ms=120):
 
     return []
 
+# 초고속 4방향 시도. 전처리/업샘플/CLAHE/이진화/디워프 없음. 문자열 리스트 반환.
 def decode_payloads_fast4(gray, max_count=4, time_budget_ms=80):
     """
     가장 빠른 경로만 수행:
@@ -353,7 +349,6 @@ def decode_payloads_fast4(gray, max_count=4, time_budget_ms=80):
         try:
             res = _dm_decode(img, max_count=max_count, timeout=int(min(80, max(5, left))))
         except TypeError:
-            # 구버전 pylibdmtx는 timeout 인자를 지원 안 할 수 있음
             res = _dm_decode(img, max_count=max_count)
         if res:
             out = []
@@ -366,7 +361,9 @@ def decode_payloads_fast4(gray, max_count=4, time_budget_ms=80):
                 return out
     return []
 
+# 카메라/ROI/주기/백오프 관리 + 백그라운드 디코드 큐 제공
 class DMatrixWatcher:
+    # 초기화
     def __init__(self,
                  camera=DEFAULT_CAMERA,
                  prefer_res=(1920,1080),
@@ -393,6 +390,7 @@ class DMatrixWatcher:
         self._thr: Optional[threading.Thread] = None
         self._last_decode_ts = 0.0
 
+    # ROI 파라미터 파싱 (직접 전달 rois 우선-> roi_px/offset 단일 ROI/ 없으면 기본값)
     @staticmethod
     def _build_rois(rois, roi_px, roi_offset):
         if rois and isinstance(rois, list):
@@ -410,6 +408,7 @@ class DMatrixWatcher:
             return [dict(name="ROI", size=[w, h], offset=[dx, dy], hflip=False)]
         return DEFAULT_ROIS
 
+    # 백그라운드 워커 시작
     def start(self):
         with self._lock:
             if self._run:
@@ -419,6 +418,7 @@ class DMatrixWatcher:
             self._thr = threading.Thread(target=self._loop, daemon=True)
             self._thr.start()
 
+    # 워커 정지
     def stop(self):
         with self._lock:
             self._run = False
@@ -426,23 +426,28 @@ class DMatrixWatcher:
             self._thr.join(timeout=2.0)
         self._release_camera()
 
+    # 일시정지 플래그 on
     def pause(self):
         with self._lock:
             self._paused = True
 
+    # 일시정지 해제
     def resume(self):
         with self._lock:
             self._paused = False
 
+    # 디코드 결과 큐 pop
     def get_detection(self, timeout: Optional[float] = None):
         try:
             return self._q.get(timeout=timeout)
         except queue.Empty:
             return None
 
+    # 내부 카메라 오픈
     def _open_camera(self):
         self._cap = open_camera(self.camera, self.prefer_res, self.prefer_fps)
 
+    # 내부 카메라 해제
     def _release_camera(self):
         if self._cap is None:
             return
@@ -455,9 +460,11 @@ class DMatrixWatcher:
             pass
         self._cap = None
 
+    # 프레임 읽기 헬퍼
     def _read(self):
         return read_frame_nonblocking(self._cap) if self._cap is not None else None
 
+    # 다중 ROI 순회 디코드
     def _try_decode_multi(self, bgr) -> List[str]:
         for r in self.rois:
             name = r["name"]; (rw, rh) = r["size"]; (dx, dy) = r["offset"]; hflip = r["hflip"]
@@ -474,6 +481,9 @@ class DMatrixWatcher:
                     return payloads
         return []
 
+    # 일시정지면 카메라 해제 후 sleep
+    # 주기적 디코드: 프레임 읽기 → 다중 ROI 디코드 → 로그
+    # 성공 시 큐에 put하고 일시정지, 실패 누적 시 백오프 확대
     def _loop(self):
         self._open_camera()
         self._last_decode_ts = 0.0
@@ -521,98 +531,6 @@ class DMatrixWatcher:
                 miss_streak += 1
                 decode_interval = min(self.max_backoff, decode_interval * 1.5) if miss_streak >= 3 else self.decode_interval_base * 0.9
         log("Watcher loop end")
-
-# ===== 1초 고정 하트비트 Standalone =====
-def _standalone():
-    rois = _load_rois_from_config() or DEFAULT_ROIS
-    cam = open_camera(DEFAULT_CAMERA, (1920,1080), 6)
-
-    state = {"detected": False, "last_payloads": [], "lock": threading.Lock(), "running": True}
-
-    def worker_decode():
-        decode_iter = 0
-        log("=== Worker start (decoding loop) ===")
-        try:
-            while state["running"]:
-                t0 = time.perf_counter()
-                frame = read_frame_nonblocking(cam)
-                t1 = time.perf_counter()
-                payloads = []
-                if frame is not None:
-                    for r in rois:
-                        (rw, rh) = r.get("size",[0,0])
-                        (dx, dy) = r.get("offset",[0,0])
-                        hflip = bool(r.get("hflip", False))
-                        roi = crop_roi_center(frame, int(rw), int(rh), int(dx), int(dy))
-                        if roi.size == 0: continue
-                        if hflip: roi = cv.flip(roi, 1)
-                        gray = cv.cvtColor(roi, cv.COLOR_BGR2GRAY)
-                        if likely_has_code(gray):
-                            payloads = decode_payloads_robust(gray, max_count=4, time_budget_ms=120)
-                            if payloads:
-                                log("HIT")
-                                break
-                t2 = time.perf_counter()
-                decode_iter += 1
-                if LOG_EVERY_DECODE and decode_iter % LOG_EVERY_DECODE == 0:
-                    log(f"decode#{decode_iter} read={(t1-t0)*1000:.2f} ms | roi+decode={(t2-t1)*1000:.2f} ms | result={'O' if payloads else 'X'}")
-                with state["lock"]:
-                    state["detected"] = bool(payloads)
-                    state["last_payloads"] = payloads
-        except Exception as e:
-            log(f"[ERR] worker exception: {e}")
-
-    def heartbeat_print():
-        log("=== Heartbeat start (1s) ===")
-        print("[INFO] 1초마다 O/X 출력. Ctrl+C 종료", flush=True)
-        try:
-            while state["running"]:
-                with state["lock"]:
-                    detected = state["detected"]
-                print("O" if detected else "X", flush=True)
-                time.sleep(1.0)
-        except Exception as e:
-            log(f"[ERR] heartbeat exception: {e}")
-
-    thr_worker = threading.Thread(target=worker_decode, daemon=True)
-    thr_beat = threading.Thread(target=heartbeat_print, daemon=True)
-    thr_worker.start()
-    thr_beat.start()
-
-    try:
-        while True:
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("\n[INFO] 종료"); log("KeyboardInterrupt. Exiting...")
-    finally:
-        state["running"] = False
-        thr_worker.join(timeout=2.0)
-        thr_beat.join(timeout=2.0)
-        if cam[0] == "realsense":
-            pipeline, rs = cam[1]; pipeline.stop()
-        else:
-            cam[1].release()
-        log("Camera released.")
-
-# ---------------- Config Loader ----------------
-def _load_rois_from_config() -> Optional[List[Dict[str, Any]]]:
-    import json
-    from pathlib import Path
-    cand = [Path("datamatrix.yaml"), Path("datamatrix.yml"), Path("config.yaml"), Path("config.json")]
-    for p in cand:
-        if not p.exists(): continue
-        try:
-            if p.suffix.lower() in (".yaml", ".yml"):
-                import yaml
-                with p.open("r", encoding="utf-8") as f: cfg = yaml.safe_load(f) or {}
-            else:
-                with p.open("r", encoding="utf-8") as f: cfg = json.load(f)
-            dm = cfg.get("datamatrix", {})
-            rois = dm.get("rois")
-            if rois: return rois
-        except Exception:
-            pass
-    return None
 
 if __name__ == "__main__":
     _standalone()
