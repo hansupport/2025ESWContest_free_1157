@@ -62,8 +62,8 @@ AI로 물체를 이해하고, DataMatrix 인식 여부에 따라 유연하게 �
 │ ├── img2emb.py # 이미지 → 임베딩(ONNX)
 │ ├── train.py # LightGBM 학습 파이프라인
 │ └── pretrain
-│ ├── capture.py
-│ └── pretrain_weight.py
+│    ├── capture.py
+│    └── pretrain_weight.py
 ├── web
 │ ├── index.html
 │ ├── style.css
