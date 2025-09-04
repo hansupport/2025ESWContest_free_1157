@@ -1,74 +1,73 @@
-embedding:
-  cam_dev: "/dev/video2"        
-  pixfmt: "YUYV" 
-  width: 848
-  height: 480
-  fps: 6 
+embedding:                     # 카메라 입력과 이미지 임베딩 관련 설정
+  cam_dev: "/dev/video2"       # 임베딩 카메라 디바이스 경로
+  pixfmt: "YUYV"               # 캡처 픽셀 포맷
+  width: 848                   # 캡처 해상도 가로
+  height: 480                  # 캡처 해상도 세로
+  fps: 6                       # 캡처 프레임레이트
 
-  # TinyMobileNet 런타임 스펙 
-  input_size: 128
-  out_dim: 128
-  width_scale: 0.35
-  fp16: false                   
-  use_depthwise: false         
-  use_bn: false             
-  pinned: false         
+  # TinyMobileNet 런타임 스펙
+  input_size: 128              # 모델 입력 크기 한 변
+  out_dim: 128                 # 모델 임베딩 차원
+  width_scale: 0.35            # MobileNet 채널 스케일
+  fp16: false                  # FP16 사용 여부
+  use_depthwise: false         # Depthwise conv 사용 여부
+  use_bn: false                # BatchNorm 사용 여부
+  pinned: false                # 고정 메모리 핀닝 사용 여부
 
   # img2emb 전용 ROI
-  roi_px: [530, 530]
-  roi_offset: [90, -130]
+  roi_px: [530, 530]           # 중심 기준 ROI 크기 w h
+  roi_offset: [90, -130]       # 중심 기준 ROI 오프셋 dx dy
 
   # ONNX 가중치 파일 경로
-  weights_path: "model/weights/tinymnet_emb_128d_w035.onnx"
+  weights_path: "model/weights/tinymnet_emb_128d_w035.onnx"  # 임베딩 ONNX 파일 위치
 
   # 엔드투엔드 워밍업
-  e2e_warmup_frames: 6 
-  e2e_pregrab: 0   
+  e2e_warmup_frames: 6         # 시작 시 프레임 워밍업 횟수
+  e2e_pregrab: 0               # 워밍업 전에 grab만 하는 프레임 수
 
   # 3뷰 concat 임베딩 설정
-  concat3: true   
-  mirror_period: 3      
-  center_shrink: 0.00        
-  mirror_shrink: 0.00      
-  
-  # rois3 포맷
+  concat3: true                # 센터+좌/우 3뷰 임베딩 결합 사용
+  mirror_period: 3             # 거울뷰 임베딩 갱신 주기 프레임
+  center_shrink: 0.00          # 센터 ROI 수축 비율
+  mirror_shrink: 0.00          # 좌우 ROI 수축 비율
+
+  # rois3 포맷 [w, h, dx, dy, hflip]
   rois3:
     - [520, 550,   90, -160, 0]   # center
     - [320, 470, -420, -160, 1]   # left mirror
     - [330, 480,  630, -180, 1]   # right mirror
 
-depth:
-  width: 1280      
-  height: 720       
-  fps: 6
-  roi_px: [260, 270]             
-  roi_offset: [12, -90]         
-  DECIM: 1                       
-  PLANE_TAU: 0.004               
-  H_MIN_BASE: 0.003               
-  H_MAX: 0.4                  
-  MIN_OBJ_PIX: 40               
-  BOTTOM_ROI_RATIO: 0.20       
-  HOLE_FILL: false            
-  CORE_MARGIN_PX: 1          
-  P_LO: 1.0                  
-  P_HI: 99.0                
+depth:                          # 깊이센서 기반 치수 추정 설정
+  width: 1280                   # Depth 캡처 해상도 가로
+  height: 720                   # Depth 캡처 해상도 세로
+  fps: 6                        # Depth 프레임레이트
+  roi_px: [260, 270]            # 중심 기준 Depth ROI 크기
+  roi_offset: [12, -90]         # 중심 기준 Depth ROI 오프셋
+  DECIM: 1                      # 디시메이션 스케일 1이면 원본
+  PLANE_TAU: 0.004              # 바닥 평면 RANSAC 허용 오차
+  H_MIN_BASE: 0.003             # 동적 임계의 기준 최소 높이
+  H_MAX: 0.4                    # 최대 높이 클램프 m
+  MIN_OBJ_PIX: 40               # 물체 마스크 최소 픽셀수
+  BOTTOM_ROI_RATIO: 0.20        # 바닥 후보 하단 ROI 비율
+  HOLE_FILL: false              # 마스크 홀 채우기 여부
+  CORE_MARGIN_PX: 1             # 경계 마진 픽셀
+  P_LO: 1.0                     # 투영 폭 하위 퍼센타일
+  P_HI: 99.0                    # 투영 폭 상위 퍼센타일
 
-datamatrix:
-  camera: 2                     
-  prefer_res: [1920, 1080]      
-  prefer_fps: 6
-  scan_timeout_s: 2.0            
-  decode_interval: 0.20         
-  log_every_decode: 0           
-  max_backoff: 1.0             
-  
+datamatrix:                     # Datamatrix 스캐너 설정
+  camera: 2                     # 스캐너 카메라 인덱스
+  prefer_res: [1920, 1080]      # 선호 해상도
+  prefer_fps: 6                 # 선호 프레임레이트
+  scan_timeout_s: 2.0           # 스캔 타임아웃 초
+  decode_interval: 0.20         # 디코드 시도 간격 초
+  log_every_decode: 0           # 매 디코드 로그 여부 1이면 활성
+  max_backoff: 1.0              # 재시도 백오프 상한
   # ROI 목록
   rois:
     - name: ROI_LEFT_MIRROR
-      size: [390, 500]
-      offset: [-450, -140]
-      hflip: true
+      size: [390, 500]          # ROI 크기 w h
+      offset: [-450, -140]      # ROI 오프셋 dx dy
+      hflip: true               # 좌우 반전 여부
     - name: ROI_RIGHT_MIRROR
       size: [390, 490]
       offset: [660, -140]
@@ -78,25 +77,20 @@ datamatrix:
       offset: [90, -160]
       hflip: false
 
-quality:
-  q_warn: 0.40      
+quality:                        # 운영 품질 기준
+  q_warn: 0.40                  # 품질 경고 임계값
 
-storage:
-  sqlite_path: "pack.db"   
+storage:                        # 저장소 경로
+  sqlite_path: "pack.db"        # 학습 로그 DB 파일
 
-model:
-  type: "lgbm"   
-  centroids_path: "centroids.npz" 
-  lgbm_path: "lgbm.pkl"      
-  topk: 3         
-  # 선택 옵션
-  # top1_threshold: 0.40
-  # smooth_window: 3
-  # smooth_min_votes: 2
-  # min_margin: 0.02
-  # centroid_margin_scale: 1500.0
+model:                          # 추론 모델 설정
+  type: "lgbm"                  # 사용 모델 타입
+  centroids_path: "centroids.npz"  # 예전 centroid 파일 경로 유지
+  lgbm_path: "lgbm.pkl"         # LGBM 모델 경로
+  topk: 3                       # 상위 k 후보 유지
+  top1_threshold: 0.40          # Unknown 게이팅용 확률 임계
 
-lgbm:
+lgbm:                           # LightGBM 기본 하이퍼파라미터
   n_estimators: 200
   num_leaves: 31
   learning_rate: 0.05
@@ -105,10 +99,10 @@ lgbm:
   bagging_fraction: 0.8
   bagging_freq: 1
   seed: 42
-  cv_k: 5       
+  cv_k: 5                       # Stratified K-fold 분할 수
 
 # train.py가 자동으로 Grid Search 수행
-lgbm_grid:
+lgbm_grid:                      # 그리드 서치 탐색 공간
   learning_rate: [0.03, 0.05, 0.08]
   num_leaves: [31, 63]
   min_data_in_leaf: [10, 20, 40]
@@ -116,12 +110,12 @@ lgbm_grid:
   bagging_fraction: [0.70, 0.90]
   bagging_freq: [1]
   n_estimators: [200, 400]
-  max_depth: [-1, 12]   
+  max_depth: [-1, 12]
 
-training:
-  min_count: 2                 
-  min_q: 0.0           
-  
-arduino:
-  port: "/dev/ttyACM0"         
-  baudrate: 9600                
+training:                       # 학습 데이터 정책
+  min_count: 2                  # 클래스 최소 샘플 수
+  min_q: 0.0                    # 품질 지수 하한 필터
+
+arduino:                        # 아두이노 연결
+  port: "/dev/ttyACM0"          # 스캐너 포트
+  baudrate: 9600                # 보드 통신 속도
