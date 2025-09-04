@@ -1,10 +1,10 @@
 :root { --bg:#0b0b0f; --fg:#e8f1ff; --accent:#60a5fa; --muted:#9aa4b2; }
 
-/* 전체 레이아웃 */
+// 전체 레이아웃
 html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .wrap { width:1024px; height:600px; margin:0 auto; display:flex; flex-direction:column; }
 
-/* ---- 헤더 ---- */
+// 헤더 
 header {
   position: relative;
   padding: 6px 14px 4px 14px;
@@ -15,7 +15,7 @@ header .top { display:flex; align-items:center; justify-content:space-between; }
 header .title { font-weight:700; letter-spacing:0.3px; font-size:18px; }
 header .hint { color:#64748b; font-size:12px; }
 
-/* 상태 램프 */
+// 상태 램프
 .statusbar { position:absolute; left:50%; transform:translateX(-50%); top:4px; pointer-events:none; }
 .lamps { display:flex; gap:14px; align-items:center; justify-content:center; }
 .lamp {
@@ -31,24 +31,24 @@ header .hint { color:#64748b; font-size:12px; }
 .lamp.paused.on    .dot { background:#eab308; box-shadow:0 0 10px 2px rgba(234,179,8,0.55); }
 .lamp.error.on     .dot { background:#ef4444; box-shadow:0 0 10px 2px rgba(239,68,68,0.55); }
 
-/* ---- 메인 그리드 ---- */
+// 메인 그리드
 main.maingrid {
   display:grid; grid-template-columns: 1fr 1.2fr; gap:16px;
   padding:16px; box-sizing:border-box; height:100%;
 }
 .leftcol, .rightcol { display:grid; gap:16px; grid-auto-rows:min-content; }
 
-/* 카드 공통 */
+// 카드 공통
 .card { background:#0f172a; border:1px solid #111827; border-radius:14px;
         padding:14px; box-shadow:0 0 0 1px rgba(255,255,255,0.02) inset; }
 .label { font-size:16px; color:var(--muted); margin-bottom:10px; }
 .sub { margin-top:8px; font-size:14px; color:#a1a1aa; }
 
-/* 좌상: 이미지 카드 */
+// 좌측 상단: 이미지 카드 
 .imgcard { padding:12px; }
 .imgwrap {
   width:100%;
-  height:210px; /* ← 필요하면 여기 높이로 사진 크기 조절 */
+  height:210px;
   background:#0b1222;
   border:1px dashed #1f2937; border-radius:10px;
   display:flex; align-items:center; justify-content:center;
@@ -56,7 +56,7 @@ main.maingrid {
 }
 .imgwrap img { width:100%; height:100%; object-fit:contain; }
 
-/* 좌하: 기록 카드 */
+// 좌측 하단: 기록 카드 
 .historycard { max-height: 160px; overflow:auto; }
 .historylist { list-style:none; margin:0; padding:0; width:100%; }
 .historylist li {
@@ -67,27 +67,38 @@ main.maingrid {
 .historylist li .left { font-weight:600; }
 .historylist li .right { color:#9aa4b2; }
 
-/* 우상: 종류/사이즈 카드 */
+// 우측 상단: 종류/사이즈 카드
 .detailscard .typebox { margin-bottom:8px; }
 .typeval { font-size:32px; font-weight:900; line-height:1.1; text-align:center; }
 .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
 .value { font-size:36px; font-weight:800; }
 
-/* 우하: 뽁뽁이 카드 */
+// 우측 하단: 뽁뽁이/박스 카드
 .bubblecard {
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  min-height: 175px; /* 190 → 175 */
+  min-height: 175px;
   flex:0 0 auto;
 }
 .bubble_value_wrap { display:flex; flex-direction:column; align-items:center; }
 .bubble_value {
-  font-size:44px;        /* 50 → 44 */
+  font-size:44px;
   line-height:1; font-weight:900; letter-spacing:0.5px; white-space:nowrap;
 }
 .bubble_cm { font-size:16px; color:#a1a1aa; margin-top:4px; }
-.prob { margin-top:4px; font-size:16px; color:#e5e7eb; }
 
-/* 경고 */
+// 박스 호수 표시
+.boxno_wrap {
+  display:flex; flex-direction:column; align-items:center; margin-top:12px;
+}
+.boxno_value {
+  font-size:32px; font-weight:900; line-height:1.1;
+  padding:4px 10px; border-radius:10px; border:1px solid #1f2937;
+  background:#0b1222;
+}
+
+.prob { margin-top:8px; font-size:16px; color:#e5e7eb; }
+
+// 경고 표시
 .warn {
   display:none; margin-top:8px; font-size:22px; font-weight:900; color:#ef4444;
   background:rgba(239,68,68,0.16); border:2px solid #ef4444; border-radius:10px;
@@ -100,18 +111,13 @@ main.maingrid {
   100%{ box-shadow:0 0 0 0 rgba(239,68,68,0); }
 }
 
-/* 풋터 */
+// 풋터 
 footer { padding:8px 14px; font-size:13px; color:#94a3b8; display:flex; justify-content:space-between; border-top:1px solid #111827; }
 
-/* ====== 단위만 작게 보이게 ====== */
-.unit {
-  font-size: 0.6em;      /* 숫자 대비 60% */
-  opacity: 0.85;
-  margin-left: 2px;
-  vertical-align: baseline;
-}
-.num { /* 필요시 개별 커스터마이즈용 (지금은 기본값 유지) */ }
-/* 더 작은 보조 문구 + 고정폭 폰트 + 줄바꿈 보존 */
+// 단위 크기 조정
+.unit { font-size: 0.6em; opacity: 0.85; margin-left: 2px; vertical-align: baseline; }
+.num {}
+
 .sub.small { font-size: 12px; line-height: 1.35; }
 .sub.mono  { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
-#params, #params2 { white-space: pre-line; } /* \n 을 줄바꿈으로 표시 */
+#params, #params2 { white-space: pre-line; }
