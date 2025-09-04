@@ -14,7 +14,7 @@
         <div class="hint">D 키로 측정, L/C 학습, P 일시정지 토글</div>
       </div>
 
-      <!-- 화면 상단 중앙 상태 표시 램프 -->
+      <!-- 화면 상단 중앙 상태 램프 -->
       <div class="statusbar">
         <div class="lamps">
           <div id="lamp_analyzing" class="lamp analyzing"><div class="dot"></div><span>분석중</span></div>
@@ -39,7 +39,7 @@
         </div>
       </section>
 
-      <!-- 우측: 종류,사이즈 + 뽁뽁이 길이 -->
+      <!-- 우측: 종류·사이즈 + 뽁뽁이 길이/박스 호수 -->
       <section class="rightcol">
         <div class="card detailscard">
           <div class="typebox">
@@ -66,14 +66,21 @@
           </div>
         </div>
 
+        <!-- 뽁뽁이 길이 -->
         <div class="card bubblecard">
           <div class="label">필요 뽁뽁이 길이</div>
           <div class="bubble_value_wrap">
             <div class="bubble_value" id="bubble">— mm</div>
             <div class="bubble_cm" id="bubble_cm">— cm</div>
           </div>
+
+          <!-- 박스 호수 표시 -->
+          <div class="boxno_wrap">
+            <div class="label">박스 호수</div>
+            <div class="boxno_value" id="box_no">—</div>
+          </div>
+
           <div class="warn" id="warn"></div>
-          <div class="sub" id="params">계산식: 2×(W+L)×층수 + overlap + slack</div>
           <div class="sub" id="params2" style="display:none"></div> 
           <div class="prob" id="prob">p = —</div>
         </div>
@@ -82,10 +89,9 @@
 
     <footer>
       <div>업데이트: <span id="ts">—</span></div>
-      <div id="note" class="hint">층수/여유 변경: <code>/api/params?layers=2&overlap_mm=120</code></div>
     </footer>
   </div>
 
-  <script src="web/script.js?v=20250831-1"></script>
+  <script src="web/script.js?v=20250901-2"></script>
 </body>
 </html>
