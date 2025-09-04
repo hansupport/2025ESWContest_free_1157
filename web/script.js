@@ -6,6 +6,17 @@ Web UI 스크립트
 */
 const ROLL_WIDTH_MM = 200;
 
+// 박스 규격(mm)
+// 1호: 13×10×10cm → [130,100,100]
+// 2호: 13×13×10cm → [130,130,100]
+const BOX1 = { name: "1호", dims: [120, 100, 100] };
+const BOX2 = { name: "2호", dims: [130, 130, 100] };
+
+// 뽁뽁이 두께 
+let LAYER_THICK_MM = 0.4; // 0.4 mm
+
+function mmToCm(x){ if(x==null) return "—"; return (x/10).toFixed(1); }
+
 // mm-> cm 변환(소숫점 1자리)
 function mmToCm(x){ if(x==null) return "—"; return (x/10).toFixed(1); }
 
@@ -74,6 +85,39 @@ function setCmHTML(id, mmVal){
   }
 }
 
+// 겹수 해석 우선순위
+function resolveLayers(s){
+  if (typeof s.wrap_layers === 'number' && s.wrap_layers > 0) return s.wrap_layers;
+
+  if (s.type_id && /^\d{16}$/.test(s.type_id)) {
+    var d = parseInt(s.type_id[15], 10);
+    if (!isNaN(d) && d > 0) return d;
+  }
+
+  if (s.params && s.params.layers != null && !isNaN(Number(s.params.layers))) {
+    var n = Number(s.params.layers);
+    if (n > 0) return n;
+  }
+
+  return 1;
+}
+
+// 박스 선택 로직
+// 각 변에 pad = 2 * layers * LAYER_THICK_MM (mm) 패딩
+// 물체와 박스 모두 오름차순 정렬 후 성분별 비교
+function pickBox(mmDims, layers){
+  var pad = 2 * (layers > 0 ? layers : 1) * LAYER_THICK_MM; // mm
+  var obj = [mmDims.w + pad, mmDims.l + pad, mmDims.h + pad].sort((a,b)=>a-b);
+
+  function fits(box){
+    var bx = box.dims.slice().sort((a,b)=>a-b);
+    return obj[0] <= bx[0] && obj[1] <= bx[1] && obj[2] <= bx[2];
+  }
+  if (fits(BOX1)) return BOX1.name;
+  if (fits(BOX2)) return BOX2.name;
+  return "적합 없음";
+}
+
 // 기록(최신 4개)/ 완료/에러 상태에서만 기록. 
 var __prev_ts = null;
 var __history = [];
@@ -138,20 +182,6 @@ async function tick(){
 
     // 공통 정보/ 계산식 안내
     setText('ts', tsFmt(s.updated_ts));
-    var p = s.params || {};
-    var layers = (p.layers!=null ? p.layers : '?');
-    var overlap = (p.overlap_mm!=null ? p.overlap_mm : '?');
-    var slack_ratio = (p.slack_ratio!=null ? p.slack_ratio : 0);
-    var slackPct = Math.round(slack_ratio * 100);
-
-    var paramsEl = document.getElementById('params');
-    if (paramsEl) {
-      paramsEl.classList.add('small','mono'); // 작게 + 고정폭
-      paramsEl.textContent =
-'계산식 (방향 최적화, 롤폭 '+ROLL_WIDTH_MM+'mm)\n' +
-'한 바퀴 = 2×(두 변의 합) / 줄수 = ceil(덮는 축 / '+ROLL_WIDTH_MM+'mm)\n' +
-'총 = 한 바퀴×'+layers+'층×줄수 + overlap('+overlap+'mm) → 마지막에 slack('+slackPct+'%) 적용';
-    }
 
     // 라벨 모드 안내
     var params2 = document.getElementById('params2');
