@@ -78,7 +78,7 @@ TYPE_MAP = {
     "000000": "도자기 컵",
     "000001": "플라스틱 컵",
     "000003": "투명 플라스틱 용기",
-    "000004": "나무 통통통 사후르",
+    "000004": "나무 통",
 }
 
 def type_name_from_id(tid: str) -> Optional[str]:
@@ -100,11 +100,13 @@ _UI_STATE = {
     "updated_ts": None,
     "warn_msg": None,
     "params": {
-        "layers": 2,
+        "layers": 1,
         "overlap_mm": 120,
         "slack_ratio": 0.03,
         "round_to_mm": 10,
+        "layer_thick_mm": 0.4
     },
+    "wrap_layers": None,
     "cap_image": None,
     "event_id": None,
 }
@@ -256,6 +258,9 @@ def _set_ui_from_label(s):
     if info is None:
         return False
     _set_ui_type(info["type_id"])
+    wrap_layers = int(info.get("wrap_layers", 1)) 
+    with _UI_LOCK: 
+        _UI_STATE["wrap_layers"] = wrap_layers
     bubble_mm = compute_bubble_length_perimeter_layers_oriented(
         info["W"], info["L"], info["H"], info.get("wrap_layers", 1)
     )
@@ -351,7 +356,8 @@ if HAVE_FLASK:
             O = _to_int(data.get("overlap_mm"), p["overlap_mm"])
             S_ = _to_float(data.get("slack_ratio"), p["slack_ratio"])
             R = _to_int(data.get("round_to_mm"), p["round_to_mm"])
-            p.update({"layers": L, "overlap_mm": O, "slack_ratio": S_, "round_to_mm": R})
+            LT = _to_float(data.get("layer_thick_mm"), p.get("layer_thick_mm", 0.4))
+            p.update({"layers": L, "overlap_mm": O, "slack_ratio": S_, "round_to_mm": R,"layer_thick_mm": LT})
             res = {"ok": True, "params": p}
         _touch_ts()
         return jsonify(res)
@@ -898,6 +904,9 @@ def main():
                     _set_event_id(tid)
                     if low_prob: _set_warn("Warning! Percent is very low"); _set_status("error")
                     else: _set_warn(None); _set_status("done")
+                    if not low_prob: 
+                        with _UI_LOCK: final_bubble_mm = _UI_STATE.get("bubble_mm")
+                        send_to_cutter(final_bubble_mm)
                     with _UI_LOCK: final_bubble_mm = _UI_STATE.get("bubble_mm")
                     send_to_cutter(final_bubble_mm)
                     if not updated:
