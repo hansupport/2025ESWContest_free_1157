@@ -1,10 +1,8 @@
 /*
-- Web UI 스크립트
-- 500ms마다 /api/state 폴링 → DOM 갱신(종류/치수/뽁뽁이 길이/확률/경고/상태 램프)
-- 최신 캡처 이미지 표시: "__mem__"→/api/capture.jpg, 파일명→/imgfile/* (캐시 버스터 적용)
-- 히스토리 최근 4건 유지(dedupe: event_id 우선, 없으면 updated_ts)
-- 타임스탬프(초/밀리초) 자동 인식, mm↔cm 표시 분리 렌더
-- 계산식 안내 문자열 출력(롤폭/레이어/overlap/slack)
+Web UI 스크립트
+500ms마다 /api/state 폴링 → DOM 갱신
+최신 캡처 이미지 표시: "__mem__"→/api/capture.jpg, 파일명→/imgfile/* (캐시 버스터 적용)
+히스토리 최근 4건 유지
 */
 const ROLL_WIDTH_MM = 200;
 
@@ -76,11 +74,7 @@ function setCmHTML(id, mmVal){
   }
 }
 
-/*
-====== 기록(최신 4개) ======
-키: event_id 우선, 없으면 updated_ts로 dedupe.
-완료/에러 상태에서만 기록. 
-*/
+// 기록(최신 4개)/ 완료/에러 상태에서만 기록. 
 var __prev_ts = null;
 var __history = [];
 var __last_history_key = null;
@@ -205,11 +199,7 @@ async function tick(){
       if (src) imgEl.src = src; else imgEl.removeAttribute('src');
     }
 
-    /* ====== 히스토리 업데이트 ======
-       1) 상태 done/error
-       2) W/L/H/bubble_mm 값 준비
-       3) event_id(있으면) 또는 updated_ts(초/밀리초)로 dedupe
-    */
+    // 히스토리 업데이트 상태 : done/error  /  W/L/H/bubble_mm 값 준비 / event_id(있으면) 또는 updated_ts(초/밀리초)로 dedupe
     var readyForHistory = (s.status === 'done' || s.status === 'error')
       && (s.W != null && s.L != null && s.H != null && s.bubble_mm != null);
 
@@ -222,13 +212,13 @@ async function tick(){
       }
     }
 
-    // 화면 갱신 기준(참고용)
+    // 화면 갱신 기준
     if (s.updated_ts && s.updated_ts !== __prev_ts) {
       __prev_ts = s.updated_ts;
     }
 
   }catch(e){
-    // 디버깅에 도움되도록 콘솔 출력
+    // 콘솔 출력
     if (window && window.console && console.error) {
       console.error('[ui] tick error:', e);
     }
